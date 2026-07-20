@@ -18,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="text-slate-900">
+      <body className="min-h-screen antialiased">
         <Navbar />
         <main>{children}</main>
       </body>

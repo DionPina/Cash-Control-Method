@@ -3,112 +3,78 @@
 import Image from "next/image";
 import { useState } from "react";
 
+const links = [
+  { href: "#hero", label: "Home" },
+  { href: "#tools", label: "Tools" },
+  { href: "#method", label: "The Method" },
+  { href: "#about", label: "About" },
+  { href: "#contact", label: "Contact" },
+];
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur shadow-sm">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 md:py-4">
-        {/* Logo + Brand */}
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 md:py-3.5">
+        {/* Logo + brand */}
         <div className="flex items-center gap-3">
-          <div className="relative h-9 w-9 md:h-10 md:w-10">
+          <div className="relative h-9 w-9 md:h-10 md:w-10 overflow-hidden rounded-2xl border border-slate-200 bg-[#020b24] shadow-sm">
             <Image
               src="/cc-logo.png"
               alt="Cash Control Method logo"
               fill
-              className="object-contain"
+              className="object-contain p-1.5"
               priority
             />
           </div>
-          <span className="text-base md:text-lg font-semibold tracking-tight text-slate-900">
-            Cash Control Method
-          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[0.65rem] font-semibold tracking-[0.25em] uppercase text-slate-500">
+              Cash Control
+            </span>
+            <span className="text-sm md:text-base font-medium text-[#020b24]">
+              Student Cash Control System
+            </span>
+          </div>
         </div>
 
-        {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-700">
-          <a
-            href="#hero"
-            className="transition-colors hover:text-slate-900 hover:underline underline-offset-4"
-          >
-            Home
-          </a>
-          <a
-            href="#method"
-            className="transition-colors hover:text-slate-900 hover:underline underline-offset-4"
-          >
-            The Method
-          </a>
-          <a
-            href="#tools"
-            className="transition-colors hover:text-slate-900 hover:underline underline-offset-4"
-          >
-            Tools
-          </a>
-          <a
-            href="#about"
-            className="transition-colors hover:text-slate-900 hover:underline underline-offset-4"
-          >
-            About
-          </a>
-          <a
-            href="#contact"
-            className="transition-colors hover:text-slate-900 hover:underline underline-offset-4"
-          >
-            Contact
-          </a>
+        {/* Desktop nav links */}
+        <div className="hidden items-center gap-6 text-xs md:flex md:text-sm">
+          {links.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-slate-700 hover:text-slate-950 transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
         </div>
 
         {/* Mobile menu button */}
         <button
           type="button"
-          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
-          className="md:hidden inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
-          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm md:hidden"
+          onClick={() => setOpen((v) => !v)}
         >
-          {open ? "Close" : "Menu"}
+          Menu
         </button>
       </nav>
 
-      {/* Mobile dropdown */}
+      {/* Mobile menu */}
       {open && (
-        <div className="md:hidden border-t border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-5xl flex-col px-4 py-2 text-sm font-medium text-slate-700">
-            <a
-              href="#hero"
-              className="py-2 border-b border-slate-100 hover:text-slate-900"
-              onClick={() => setOpen(false)}
-            >
-              Home
-            </a>
-            <a
-              href="#method"
-              className="py-2 border-b border-slate-100 hover:text-slate-900"
-              onClick={() => setOpen(false)}
-            >
-              The Method
-            </a>
-            <a
-              href="#tools"
-              className="py-2 border-b border-slate-100 hover:text-slate-900"
-              onClick={() => setOpen(false)}
-            >
-              Tools
-            </a>
-            <a
-              href="#about"
-              className="py-2 border-b border-slate-100 hover:text-slate-900"
-              onClick={() => setOpen(false)}
-            >
-              About
-            </a>
-            <a
-              href="#contact"
-              className="py-2 hover:text-slate-900"
-              onClick={() => setOpen(false)}
-            >
-              Contact
-            </a>
+        <div className="border-t border-slate-200 bg-white/95 md:hidden">
+          <div className="mx-auto flex max-w-5xl flex-col px-4 py-2 text-sm">
+            {links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="py-2 text-slate-800 hover:text-slate-950"
+                onClick={() => setOpen(false)}
+              >
+                {link.label}
+              </a>
+            ))}
           </div>
         </div>
       )}

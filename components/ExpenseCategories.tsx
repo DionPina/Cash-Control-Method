@@ -12,53 +12,61 @@ import {
 } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 
-// Register chart.js pieces & the datalabels plugin
 ChartJS.register(ArcElement, Tooltip, Legend, ChartDataLabels);
 
-type CategoryTotals = {
+type Category = {
+  id: string;
+  label: string;
+  value: number;
+  placeholder: string;
+};
+
+type ExpenseCategoriesTotals = {
   totalCategories: number;
   averagePerWeek: number;
 };
 
 type ExpenseCategoriesProps = {
-  onTotalsChange?: (totals: CategoryTotals) => void;
+  onTotalsChange?: (totals: ExpenseCategoriesTotals) => void;
 };
 
-const formatCurrency = (value: number) =>
-  value.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
+const initialCategories: Category[] = [
+  { id: "food", label: "Food & groceries", value: 0, placeholder: "e.g. 250" },
+  { id: "gas", label: "Gas & transport", value: 0, placeholder: "e.g. 120" },
+  { id: "fun", label: "Fun & going out", value: 0, placeholder: "e.g. 100" },
+  { id: "shopping", label: "Shopping & clothes", value: 0, placeholder: "e.g. 80" },
+  { id: "subscriptions", label: "Subscriptions", value: 0, placeholder: "e.g. 40" },
+  { id: "other", label: "Other variable", value: 0, placeholder: "e.g. 60" },
+];
+
+const parseNumber = (raw: string): number => {
+  if (!raw) return 0;
+  const cleaned = raw.replace(/,/g, "");
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : 0;
+};
 
 export default function ExpenseCategories({
   onTotalsChange,
 }: ExpenseCategoriesProps) {
-  const [housing, setHousing] = useState("");
-  const [food, setFood] = useState("");
-  const [transportation, setTransportation] = useState("");
-  const [school, setSchool] = useState("");
-  const [personal, setPersonal] = useState("");
-  const [fun, setFun] = useState("");
-  const [other, setOther] = useState("");
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
 
-  const toNumber = (value: string) => Number(value.replace(/,/g, "")) || 0;
+  const handleChange = (id: string, rawValue: string) => {
+    const numeric = parseNumber(rawValue);
+    setCategories((prev) =>
+      prev.map((cat) =>
+        cat.id === id ? { ...cat, value: numeric } : cat
+      )
+    );
+  };
 
-  const categories = [
-    { label: "Housing", value: toNumber(housing) },
-    { label: "Food", value: toNumber(food) },
-    { label: "Transportation", value: toNumber(transportation) },
-    { label: "School", value: toNumber(school) },
-    { label: "Personal", value: toNumber(personal) },
-    { label: "Fun", value: toNumber(fun) },
-    { label: "Other", value: toNumber(other) },
-  ];
-
-  const totalCategories = categories.reduce((sum, cat) => sum + cat.value, 0);
+  const totalCategories = categories.reduce(
+    (sum, cat) => sum + cat.value,
+    0
+  );
   const averagePerWeek = totalCategories / 4 || 0;
   const hasData = totalCategories > 0;
 
-  // Notify parent (page.tsx) when totals change
   useEffect(() => {
     onTotalsChange?.({
       totalCategories,
@@ -66,231 +74,177 @@ export default function ExpenseCategories({
     });
   }, [totalCategories, averagePerWeek, onTotalsChange]);
 
+  const backgroundColors = [
+    "#020b24", // navy
+    "#6b4a2f", // brown
+    "#d9c9aa", // tan
+    "#4a6b4f", // muted green
+    "#8c7853", // deeper brown
+    "#c9ad7f", // light gold
+  ];
+
   const chartData: ChartData<"doughnut"> = {
     labels: categories.map((c) => c.label),
     datasets: [
       {
         data: categories.map((c) => c.value),
-        backgroundColor: [
-          "#020617", // slate-950
-          "#0f172a", // slate-900
-          "#1d4ed8", // blue-700
-          "#0ea5e9", // sky-500
-          "#22c55e", // green-500
-          "#f97316", // orange-500
-          "#6366f1", // indigo-500
-        ],
-        borderColor: "#e5e7eb",
-        borderWidth: 1,
+        backgroundColor: backgroundColors,
+        borderWidth: 0,
       },
     ],
   };
-    const backgroundColors =
-    chartData.datasets[0].backgroundColor as string[] | undefined;
 
   const chartOptions: ChartOptions<"doughnut"> = {
     responsive: true,
-    maintainAspectRatio: false,
     plugins: {
       legend: {
         display: false,
       },
       tooltip: {
-        enabled: true,
         callbacks: {
-          label: (ctx) => {
-            const label = ctx.label || "";
-            const value = ctx.parsed as number;
-            const total = totalCategories || 1;
-            const pct = (value / total) * 100;
-            return `${label}: ${formatCurrency(value)} (${pct.toFixed(0)}%)`;
+          label: (context) => {
+            const value = context.parsed || 0;
+            const pct = totalCategories
+              ? (value / totalCategories) * 100
+              : 0;
+            const label = context.label || "";
+            return `${label}: $${value.toFixed(0)} (${pct.toFixed(1)}%)`;
           },
         },
       },
-      // show percentages on the chart
       datalabels: {
-        color: "#ffffff",
+        color: "#f5f2ea",
         font: {
-          weight: "bold",
+          size: 11,
+          weight: "600",
         },
-        formatter: (value, context) => {
-          const dataArray =
-            (context.chart.data.datasets?.[0]?.data as number[]) || [];
-          const total =
-            dataArray.reduce((sum, val) => sum + (val || 0), 0) || 0;
-          if (!total || !value) return "";
-          const pct = (Number(value) / total) * 100;
+        formatter: (value: number) => {
+          if (!totalCategories || !value) return "";
+          const pct = (value / totalCategories) * 100;
+          if (pct < 5) return ""; // hide tiny slivers
           return `${pct.toFixed(0)}%`;
         },
       },
     },
-    cutout: "65%",
+    cutout: "66%",
   };
 
-  const handleInputChange =
-    (setter: (value: string) => void) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setter(e.target.value);
-    };
+  const formatCurrency = (value: number): string =>
+    value.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
 
   return (
-    <section id="categories" className="mx-auto max-w-5xl px-4 py-12 md:py-16">
-      <div className="rounded-2xl bg-white p-6 shadow-sm md:p-10 border border-slate-200">
-        <div className="grid gap-10 md:grid-cols-2">
-          {/* Left: inputs */}
-          <div>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Step 3
-            </p>
-            <h2 className="mt-2 text-2xl md:text-3xl font-semibold mb-2 text-slate-900">
-              Expense Categories
-            </h2>
-            <p className="text-sm md:text-base text-slate-700 mb-6">
-              Break your monthly spending into simple categories. This mirrors
-              how you&apos;ll track things in your spreadsheet: clear buckets
-              instead of a million tiny rules.
-            </p>
+    <section
+  id="categories"
+  className="mx-auto max-w-5xl px-4 py-12 md:py-16 scroll-mt-24"
+>
+      <div className="rounded-3xl border border-[#decfb0] bg-[#fdfaf4] p-6 md:p-10 shadow-sm">
+        <p className="text-xs font-semibold tracking-[0.2em] text-[#8c7853] uppercase">
+          Step 3
+        </p>
+        <h2 className="text-2xl font-semibold md:text-3xl text-[#020b24]">
+  Expense Categories &amp; Plan
+</h2>
+        <p className="mt-2 text-sm md:text-base text-[#6b4a2f] max-w-2xl">
+          Break your variable spending into categories. The donut chart shows
+          exactly where your planned cash is going, in both dollars and
+          percentages.
+        </p>
 
-            <div className="space-y-4">
-              <CategoryInput
-                label="Housing"
-                helper="Rent, utilities, internet, etc."
-                value={housing}
-                onChange={handleInputChange(setHousing)}
-              />
-              <CategoryInput
-                label="Food"
-                helper="Groceries, eating out, campus snacks."
-                value={food}
-                onChange={handleInputChange(setFood)}
-              />
-              <CategoryInput
-                label="Transportation"
-                helper="Gas, rideshare, bus pass, parking."
-                value={transportation}
-                onChange={handleInputChange(setTransportation)}
-              />
-              <CategoryInput
-                label="School"
-                helper="Books, fees, supplies, software."
-                value={school}
-                onChange={handleInputChange(setSchool)}
-              />
-              <CategoryInput
-                label="Personal"
-                helper="Clothes, hygiene, subscriptions."
-                value={personal}
-                onChange={handleInputChange(setPersonal)}
-              />
-              <CategoryInput
-                label="Fun"
-                helper="Hobbies, going out, games, trips."
-                value={fun}
-                onChange={handleInputChange(setFun)}
-              />
-              <CategoryInput
-                label="Other"
-                helper="Anything that doesn&apos;t fit above."
-                value={other}
-                onChange={handleInputChange(setOther)}
-              />
+        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.4fr)]">
+          {/* Category inputs */}
+          <div className="space-y-4">
+            {categories.map((cat, idx) => (
+              <div key={cat.id} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-medium text-[#020b24]">
+                    {cat.label}
+                  </label>
+                  {cat.value > 0 && (
+                    <span className="text-xs text-[#8c7853]">
+                      {formatCurrency(cat.value)}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={cat.placeholder}
+                  onChange={(e) => handleChange(cat.id, e.target.value)}
+                  className="w-full rounded-xl border border-[#d9cdb7] bg-[#f5f2ea] px-3 py-2.5 text-sm text-[#020b24] outline-none focus:border-[#6b4a2f] focus:ring-2 focus:ring-[#ebe0cf]"
+                />
+                {idx === 0 && (
+                  <p className="text-xs text-[#8c7853]">
+                    Use your real spending as a guide. This doesn&apos;t have to
+                    be perfect—just honest.
+                  </p>
+                )}
+              </div>
+            ))}
+
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <span className="text-[#6b4a2f]">Total planned categories</span>
+              <span className="font-semibold text-[#020b24]">
+                {formatCurrency(totalCategories)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#6b4a2f]">
+                Average per week (4-week month)
+              </span>
+              <span className="font-semibold text-[#020b24]">
+                {formatCurrency(averagePerWeek || 0)}
+              </span>
             </div>
           </div>
 
-          {/* Right: summary + donut chart */}
-          <div className="flex flex-col">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 flex-1 flex flex-col">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                Category summary
-              </h3>
-              <p className="text-sm text-slate-600 mb-4">
-                Total across all categories:{" "}
-                <span className="font-semibold">
-                  {formatCurrency(totalCategories)}
-                </span>
-                <br />
-                Average per week in categories:{" "}
-                <span className="font-semibold">
-                  {formatCurrency(averagePerWeek)}
-                </span>
-              </p>
+          {/* Donut chart + legend */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-52 h-52 sm:w-64 sm:h-64">
+              {hasData ? (
+                <Doughnut data={chartData} options={chartOptions} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-[#8c7853] text-center px-6">
+                  Add a few category amounts on the left to see the donut chart
+                  fill in.
+                </div>
+              )}
+            </div>
 
-              <div className="relative h-52 md:h-64 mb-6">
-                {hasData ? (
-                  <Doughnut data={chartData} options={chartOptions} />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-center text-xs md:text-sm text-slate-500 px-6">
-                    Start entering amounts on the left to see your spending
-                    breakdown here. Use it as a quick check against your
-                    variable budget in Step 1.
+            <div className="w-full space-y-2 text-xs">
+              {categories.map((cat, idx) => {
+                if (!cat.value) return null;
+                const pct = totalCategories
+                  ? (cat.value / totalCategories) * 100
+                  : 0;
+                return (
+                  <div
+                    key={cat.id}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{
+                          backgroundColor:
+                            backgroundColors[idx % backgroundColors.length],
+                        }}
+                      />
+                      <span className="text-[#6b4a2f]">{cat.label}</span>
+                    </div>
+                    <span className="text-[#020b24] font-medium">
+                      {pct.toFixed(1)}%
+                    </span>
                   </div>
-                )}
-              </div>
-
-              {/* Legend */}
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-700">
-                {categories.map((cat, idx) => (
-                  <div key={cat.label} className="flex items-center gap-1">
-                    <span
-                      className="inline-block h-2 w-2 rounded-sm"
-                      style={{
-                        backgroundColor: backgroundColors?.[idx] ?? "#0f172a"
-                      }}
-                    />
-                    <span>{cat.label}</span>
-                    {totalCategories > 0 && cat.value > 0 && (
-                      <span className="text-slate-500">
-                        {(
-                          (cat.value / totalCategories) *
-                          100
-                        ).toFixed(0)}
-                        %
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-4 text-xs text-slate-500">
-                <span className="font-semibold">Tip:</span> If your category
-                total is higher than your variable budget from Step 1,
-                you&apos;re planning to overspend and should adjust one of them.
-              </p>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-type CategoryInputProps = {
-  label: string;
-  helper: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-};
-
-function CategoryInput({ label, helper, value, onChange }: CategoryInputProps) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <label className="block text-sm font-semibold text-slate-900 mb-1">
-          {label}
-        </label>
-        <span className="text-[11px] font-medium tracking-wide text-slate-500">
-          MONTHLY
-        </span>
-      </div>
-      <input
-        type="text"
-        inputMode="decimal"
-        placeholder="e.g. 450"
-        value={value}
-        onChange={onChange}
-        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-      />
-      <p className="mt-1 text-xs text-slate-500">{helper}</p>
-    </div>
   );
 }

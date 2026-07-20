@@ -220,23 +220,28 @@ export default function HomePage() {
         </section>
 
         {/* Contact / footer placeholder */}
-        <section id="contact" className="bg-slate-900 text-slate-100 scroll-mt-24">
-          <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm md:text-base">
-            <p className="text-slate-300">
-              Have ideas for new tools or want to use Cash Control Method with a
-              class or club? A simple contact form will live here soon.
-            </p>
-            <span className="inline-flex items-center rounded-full border border-slate-500 px-4 py-2 text-xs md:text-sm text-slate-200">
-              Coming soon · Student tools in progress
-            </span>
+        <section
+          id="contact"
+          className="scroll-mt-24 bg-white"
+        >
+          <div className="max-w-5xl mx-auto px-4 py-10 border-t border-slate-200">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm md:text-base">
+              <p className="text-slate-600">
+                Have ideas for new tools or want to use Cash Control Method with a
+                class or club? A simple contact form will live here soon.
+              </p>
+              <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs md:text-sm text-slate-700">
+                Coming soon · Student tools in progress
+              </span>
+            </div>
           </div>
         </section>
       </div>
       <p className="max-w-5xl mx-auto px-4 pb-8 text-center text-[0.7rem] md:text-xs text-slate-500">
-  Cash Control Method is an educational tool and does not provide personalized
-  financial, investment, or tax advice. Talk to a qualified professional before
-  making major financial decisions.
-</p>
+        Cash Control Method is an educational tool and does not provide personalized
+        financial, investment, or tax advice. Talk to a qualified professional before
+        making major financial decisions.
+      </p>
     </>
   );
 }
