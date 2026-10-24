@@ -5,10 +5,9 @@ import { useState } from "react";
 
 const links = [
   { href: "#hero", label: "Home" },
-  { href: "#tools", label: "Tools" },
+  { href: "#app", label: "Your Books" },
   { href: "#method", label: "The Method" },
   { href: "#about", label: "About" },
-  { href: "#contact", label: "Contact" },
 ];
 
 export default function Navbar() {
@@ -24,6 +23,7 @@ export default function Navbar() {
               src="/cc-logo.png"
               alt="Cash Control Method logo"
               fill
+              sizes="(min-width: 768px) 40px, 36px"
               className="object-contain p-1.5"
               priority
             />
@@ -33,7 +33,7 @@ export default function Navbar() {
               Cash Control
             </span>
             <span className="text-sm md:text-base font-medium text-[#020b24]">
-              Student Cash Control System
+              Budgeting for college life
             </span>
           </div>
         </div>
@@ -54,6 +54,8 @@ export default function Navbar() {
         {/* Mobile menu button */}
         <button
           type="button"
+          aria-expanded={open}
+          aria-controls="mobile-navigation"
           className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
@@ -63,7 +65,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-t border-slate-200 bg-white/95 md:hidden">
+        <div id="mobile-navigation" className="border-t border-slate-200 bg-white/95 md:hidden">
           <div className="mx-auto flex max-w-5xl flex-col px-4 py-2 text-sm">
             {links.map((link) => (
               <a

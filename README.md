@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cash Control Method
 
-## Getting Started
+Cash Control is an accounting-first personal finance recordkeeping app for
+college students. It uses one transaction ledger to calculate cash,
+liabilities, net financial position, and weekly/monthly reports.
 
-First, run the development server:
+The current experience includes guided first-time setup, a connected monthly
+plan, category budgets, required-payment reminders, savings goals,
+budget-versus-actual comparisons, and separate weekly and monthly reviews.
+See [PRODUCT_VISION.md](./PRODUCT_VISION.md) for the product principles and
+decision framework.
+
+## Run it locally
+
+In Terminal, from this project folder:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open [http://localhost:3000](http://localhost:3000). Next.js refreshes the
+page as files are saved in VS Code. Stop the server with `Control + C`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verify changes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-## Learn More
+## Data and privacy
 
-To learn more about Next.js, take a look at the following resources:
+The current version stores data in the browser's `localStorage` under the
+versioned key `cash-control-accounting:v1`. Records are specific to that browser
+and device. There are no accounts, cloud backups, or bank connections yet. Use
+the sample-data button to explore the app without making sample records the
+default.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Accounting model
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Income/funding raises cash and is reported as income.
+- Cash expenses lower cash; credit purchases raise a liability.
+- Borrowing raises cash and a liability but is not income.
+- Debt payments lower cash by principal plus interest, lower the liability by
+  principal, and treat interest as an expense.
+- Transfers move money between cash accounts without changing total cash.
+- Pending transactions stay in the ledger but do not affect balances or reports.
