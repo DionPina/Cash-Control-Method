@@ -12,10 +12,16 @@ import {
 } from "../lib/accounting/reports.ts";
 import {
   budgetVariances,
-  createPlanSnapshot,
+  calculatePlanProgress,
+  calculateSafeToSpend,
   planForMonth,
   totalCategoryBudget,
 } from "../lib/accounting/planning.ts";
+import {
+  createAccountingBackup,
+  migrateAndValidate,
+  parseAccountingBackup,
+} from "../lib/accounting/persistence.ts";
 import {
   validateAssetAccount,
   validateTransaction,
@@ -299,14 +305,116 @@ test("plan snapshot keeps expected amounts separate from posted activity", () =>
       },
     ],
   };
-  const monthly = generateMonthlyReport(plannedData, "2026-01-15");
-  const snapshot = createPlanSnapshot(plannedData, "2026-01-15", monthly);
+  const snapshot = calculatePlanProgress(plannedData, "2026-01-15");
 
   assert.equal(snapshot.totalCash, 3_290);
   assert.equal(snapshot.expectedIncomeRemaining, 500);
   assert.equal(snapshot.plannedExpensesRemaining, 200);
   assert.equal(snapshot.debtPaymentRemaining, 90);
-  assert.equal(snapshot.availableToPlan, 3_300);
+  assert.equal(snapshot.savingsContributed, 200);
+  assert.equal(snapshot.savingsRemaining, 0);
+  assert.equal(snapshot.availableAfterPlan, 3_400);
+});
+
+test("plan progress counts only expected income that has not arrived", () => {
+  const plannedData = {
+    ...data,
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 1_500,
+      categoryBudgets: {},
+      plannedDebtPayment: 0,
+      plannedSavings: 0,
+      safetyBuffer: 0,
+    }],
+  };
+  const progress = calculatePlanProgress(plannedData, "2026-01-15");
+
+  assert.equal(progress.totalCash, 3_290);
+  assert.equal(progress.expectedIncomeRemaining, 500);
+  assert.equal(progress.availableAfterPlan, 3_790);
+});
+
+test("required payments supplement category budgets without being counted twice", () => {
+  const basePlan = {
+    month: "2026-01",
+    expectedIncome: 0,
+    categoryBudgets: { "rent-housing": 650 },
+    plannedDebtPayment: 0,
+    plannedSavings: 0,
+    safetyBuffer: 0,
+  };
+  const covered = calculatePlanProgress({
+    ...data,
+    obligations: [{ id: "rent", name: "Rent", amount: 650, dueDay: 20, category: "rent-housing" }],
+    monthlyPlans: [basePlan],
+  }, "2026-01-15");
+  const uncovered = calculatePlanProgress({
+    ...data,
+    obligations: [{ id: "rent", name: "Rent", amount: 800, dueDay: 20, category: "rent-housing" }],
+    monthlyPlans: [basePlan],
+  }, "2026-01-15");
+
+  assert.equal(covered.uncoveredRequiredPayments, 0);
+  assert.equal(uncovered.uncoveredRequiredPayments, 150);
+});
+
+test("goal contributions and savings transfers connect to the plan once", () => {
+  const progress = calculatePlanProgress({
+    ...data,
+    goals: [{ id: "goal", name: "Laptop", targetAmount: 1_000, currentAmount: 0, monthlyContribution: 250 }],
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 0,
+      categoryBudgets: {},
+      plannedDebtPayment: 0,
+      plannedSavings: 100,
+      safetyBuffer: 0,
+    }],
+  }, "2026-01-15");
+
+  assert.equal(progress.savingsTarget, 250);
+  assert.equal(progress.savingsContributed, 200);
+  assert.equal(progress.savingsRemaining, 50);
+});
+
+test("safe-to-spend stops at next income and protects known bills", () => {
+  const snapshot = calculateSafeToSpend({
+    ...data,
+    profile: { onboardingComplete: true, priorities: [], nextIncomeDate: "2026-01-20" },
+    obligations: [{ id: "phone", name: "Phone", amount: 60, dueDay: 18, category: "phone-internet" }],
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 0,
+      categoryBudgets: {},
+      plannedDebtPayment: 0,
+      plannedSavings: 0,
+      safetyBuffer: 100,
+    }],
+  }, "2026-01-15");
+
+  assert.equal(snapshot.horizonDate, "2026-01-20");
+  assert.equal(snapshot.upcomingRequiredPayments, 60);
+  assert.equal(snapshot.safeToSpend, 3_130);
+});
+
+test("backup round-trip validates nested accounting records", () => {
+  const backup = createAccountingBackup(data, "2026-01-31T00:00:00.000Z");
+  const parsed = parseAccountingBackup(JSON.parse(JSON.stringify(backup)));
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.ok && parsed.data.transactions.length, transactions.length);
+});
+
+test("stored data validation rejects malformed nested records", () => {
+  const malformed = {
+    ...data,
+    transactions: [{ ...transactions[0], amount: "one thousand" }],
+  };
+  const parsed = migrateAndValidate(malformed);
+
+  assert.equal(parsed.ok, false);
+  assert.match(parsed.error, /Transaction 1 is invalid/);
 });
 
 test("transaction validation rejects a transfer to the same account", () => {

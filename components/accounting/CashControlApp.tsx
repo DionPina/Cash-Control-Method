@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { useAccountingStore } from "@/hooks/useAccountingStore";
 import { createSampleData } from "@/lib/accounting/sampleData";
+import { createAccountingBackup, parseAccountingBackup } from "@/lib/accounting/persistence";
 import type { Transaction } from "@/lib/accounting/types";
 
 import AccountsPanel from "./AccountsPanel";
@@ -29,6 +30,8 @@ export default function CashControlApp() {
   const store = useAccountingStore();
   const [activeArea, setActiveArea] = useState<AppArea>("home");
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
 
   if (!store.hydrated) {
     return (
@@ -72,6 +75,43 @@ export default function CashControlApp() {
     }
   };
 
+  const exportBackup = () => {
+    const backup = createAccountingBackup(store.data);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cash-control-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setBackupMessage("Backup exported. Keep the JSON file somewhere you trust.");
+  };
+
+  const importBackup = async (file?: File) => {
+    if (!file) return;
+    if (file.size > 5_000_000) {
+      setBackupMessage("That backup is larger than 5 MB and was not opened.");
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const result = parseAccountingBackup(parsed);
+      if (!result.ok) {
+        setBackupMessage(`Import stopped: ${result.error}`);
+        return;
+      }
+      if (!window.confirm("Import this backup and replace the records currently saved in this browser?")) return;
+      store.replaceAllData(result.data);
+      setEditingTransaction(null);
+      setActiveArea("home");
+      setBackupMessage("Backup imported successfully.");
+    } catch {
+      setBackupMessage("Import stopped: the selected file is not valid JSON.");
+    } finally {
+      if (importInput.current) importInput.current.value = "";
+    }
+  };
+
   if (!store.data.profile?.onboardingComplete) {
     return (
       <OnboardingFlow
@@ -105,6 +145,20 @@ export default function CashControlApp() {
               <SecondaryButton type="button" onClick={() => setActiveArea("accounts")}>
                 Accounts & setup
               </SecondaryButton>
+              <SecondaryButton type="button" onClick={exportBackup}>
+                Export backup
+              </SecondaryButton>
+              <SecondaryButton type="button" onClick={() => importInput.current?.click()}>
+                Import backup
+              </SecondaryButton>
+              <input
+                ref={importInput}
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                aria-label="Choose a Cash Control JSON backup"
+                onChange={(event) => void importBackup(event.target.files?.[0])}
+              />
               <DangerButton type="button" onClick={clearAllData}>
                 Clear all data
               </DangerButton>
@@ -137,6 +191,13 @@ export default function CashControlApp() {
           <div role="alert" className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p>{store.storageMessage}</p>
             <button type="button" onClick={store.dismissStorageMessage} className="font-semibold underline underline-offset-4">Dismiss</button>
+          </div>
+        )}
+
+        {backupMessage && (
+          <div role="status" className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-slate-700">
+            <p>{backupMessage}</p>
+            <button type="button" onClick={() => setBackupMessage(null)} className="font-semibold text-sky-900">Dismiss</button>
           </div>
         )}
 
@@ -174,6 +235,7 @@ export default function CashControlApp() {
               onDeleteObligation={store.deleteObligation}
               onSaveGoal={store.upsertGoal}
               onDeleteGoal={store.deleteGoal}
+              onSaveProfile={store.saveProfile}
             />
           )}
           {activeArea === "activity" && (

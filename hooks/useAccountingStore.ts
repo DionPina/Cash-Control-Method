@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { STORAGE_KEY } from "@/lib/accounting/constants";
+import { migrateAndValidate } from "@/lib/accounting/persistence";
 import type {
   AccountingData,
   AssetAccount,
@@ -25,50 +26,28 @@ const EMPTY_DATA: AccountingData = {
   goals: [],
 };
 
-function normalizeData(value: AccountingData): AccountingData {
-  return {
-    ...value,
-    profile:
-      value.profile ??
-      ({
-        onboardingComplete:
-          value.assetAccounts.length > 0 || value.transactions.length > 0,
-        priorities: [],
-      } satisfies StudentProfile),
-    obligations: value.obligations ?? [],
-    monthlyPlans: value.monthlyPlans ?? [],
-    goals: value.goals ?? [],
-  };
-}
-
-function isStoredData(value: unknown): value is AccountingData {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<AccountingData>;
-  return (
-    candidate.version === 1 &&
-    Array.isArray(candidate.assetAccounts) &&
-    Array.isArray(candidate.liabilityAccounts) &&
-    Array.isArray(candidate.transactions)
-  );
-}
-
 export function useAccountingStore() {
   const [data, setData] = useState<AccountingData>(EMPTY_DATA);
   const [hydrated, setHydrated] = useState(false);
   const [storageMessage, setStorageMessage] = useState<string | null>(null);
+  const persistenceReady = useRef(false);
 
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
-        if (isStoredData(parsed)) {
-          setData(normalizeData(parsed));
+        const result = migrateAndValidate(parsed);
+        if (result.ok) {
+          setData(result.data);
+          persistenceReady.current = true;
         } else {
           setStorageMessage(
-            "Saved Cash Control data could not be recognized. No stored records were changed.",
+            `Saved Cash Control data could not be used. ${result.error} The stored records were left unchanged.`,
           );
         }
+      } else {
+        persistenceReady.current = true;
       }
     } catch {
       setStorageMessage(
@@ -80,7 +59,7 @@ export function useAccountingStore() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !persistenceReady.current) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
@@ -143,7 +122,13 @@ export function useAccountingStore() {
   }, []);
 
   const replaceAllData = useCallback((nextData: AccountingData) => {
-    setData(normalizeData(nextData));
+    const result = migrateAndValidate(nextData);
+    if (!result.ok) {
+      setStorageMessage(`Cash Control could not use that data. ${result.error}`);
+      return;
+    }
+    persistenceReady.current = true;
+    setData(result.data);
   }, []);
 
   const saveProfile = useCallback((profile: StudentProfile) => {
@@ -195,6 +180,7 @@ export function useAccountingStore() {
   }, []);
 
   const clearAllData = useCallback(() => {
+    persistenceReady.current = true;
     setData(EMPTY_DATA);
     setStorageMessage(null);
   }, []);

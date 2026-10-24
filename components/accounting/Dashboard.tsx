@@ -4,7 +4,7 @@ import { EXPENSE_CATEGORIES, getLabel } from "@/lib/accounting/constants";
 import { formatDate, todayIso } from "@/lib/accounting/dates";
 import { currentFinancialPosition, sortTransactionsNewestFirst } from "@/lib/accounting/engine";
 import { formatCurrency } from "@/lib/accounting/format";
-import { budgetVariances, createPlanSnapshot, planForMonth } from "@/lib/accounting/planning";
+import { budgetVariances, calculatePlanProgress, calculateSafeToSpend, planForMonth } from "@/lib/accounting/planning";
 import { generateMonthlyReport, generateWeeklyReport } from "@/lib/accounting/reports";
 import type { AccountingData, ExpenseCategory } from "@/lib/accounting/types";
 
@@ -22,7 +22,8 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
   const weekly = generateWeeklyReport(data, today);
   const monthly = generateMonthlyReport(data, today);
   const plan = planForMonth(data, month);
-  const snapshot = createPlanSnapshot(data, today, monthly);
+  const progress = calculatePlanProgress(data, today);
+  const safe = calculateSafeToSpend(data, today);
   const variances = budgetVariances(plan, monthly);
   const pending = data.transactions.filter((transaction) => transaction.status === "pending");
   const uncategorized = data.transactions.filter((transaction) => transaction.status === "posted" && transaction.type === "expense" && transaction.category === "uncategorized");
@@ -31,7 +32,7 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
   const name = data.profile?.firstName ? `, ${data.profile.firstName}` : "";
   const topWeekly = weekly.expenseBreakdown.slice(0, 4);
   const upcoming = upcomingObligations(data, today).slice(0, 4);
-  const insight = buildInsight({ available: snapshot.availableToPlan, pending: pending.length, uncategorized: uncategorized.length, topCategory: topWeekly[0]?.category, topAmount: topWeekly[0]?.amount, hasPlan });
+  const insight = buildInsight({ available: progress.availableAfterPlan, pending: pending.length, uncategorized: uncategorized.length, topCategory: topWeekly[0]?.category, topAmount: topWeekly[0]?.amount, hasPlan });
 
   return (
     <div className="space-y-6">
@@ -40,16 +41,16 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
       <section className="overflow-hidden rounded-[2rem] bg-[#020b24] p-6 text-white shadow-sm sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Available after your plan</p>
-            <p className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${snapshot.availableToPlan < 0 ? "text-amber-300" : "text-white"}`}>{formatCurrency(snapshot.availableToPlan)}</p>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">This estimate starts with current cash, includes expected money still to come, and sets aside the unfinished parts of your plan and cash cushion.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Safe to spend through {formatDate(safe.horizonDate)}</p>
+            <p className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{formatCurrency(safe.safeToSpend)}</p>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">This guardrail starts with cash today and protects bills you added, pending cash activity, unfinished savings, and your cash cushion. {safe.usesNextIncomeDate ? "It stops at your next expected income date." : "Add a future income date to use a before-payday horizon."}</p>
             <button type="button" onClick={() => onNavigate("plan")} className="mt-4 text-sm font-semibold text-sky-300 underline decoration-sky-500 underline-offset-4">See how this was calculated</button>
           </div>
           <dl className="grid grid-cols-2 gap-3">
-            <DarkMetric label="Cash today" value={snapshot.totalCash} />
-            <DarkMetric label="Expected next" value={snapshot.expectedIncomeRemaining} />
-            <DarkMetric label="Expenses left in plan" value={snapshot.plannedExpensesRemaining} />
-            <DarkMetric label="Cash cushion" value={snapshot.safetyBuffer} />
+            <DarkMetric label="Cash today" value={safe.cashNow} />
+            <DarkMetric label="Bills due first" value={safe.upcomingRequiredPayments} />
+            <DarkMetric label="Pending cash out" value={safe.pendingCashOutflows} />
+            <DarkMetric label="Savings + cushion" value={safe.savingsRemaining + safe.safetyBuffer} />
           </dl>
         </div>
       </section>
