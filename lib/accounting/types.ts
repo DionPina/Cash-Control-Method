@@ -20,7 +20,13 @@ export type TransactionType =
   | "expense"
   | "borrowing"
   | "debt-payment"
-  | "transfer";
+  | "transfer"
+  | "meal-plan-funding"
+  | "meal-plan-use";
+
+export type BudgetCadence = "daily" | "weekly" | "monthly" | "semester" | "one-time";
+export type HousingSituation = "dorm" | "off-campus" | "with-family" | "other";
+export type MealPlanType = "declining-balance" | "swipes" | "unlimited";
 
 export type IncomeCategory =
   | "wages-salary"
@@ -72,6 +78,18 @@ export type LiabilityAccount = {
   dueDay?: number;
 };
 
+export type MealPlanAccount = {
+  id: string;
+  name: string;
+  type: MealPlanType;
+  openingBalance: number;
+  openingBalanceDate: string;
+  semesterCost?: number;
+  semesterStart?: string;
+  semesterEnd?: string;
+  swipesRemaining?: number;
+};
+
 type BaseTransaction = {
   id: string;
   date: string;
@@ -115,17 +133,33 @@ export type TransferTransaction = BaseTransaction & {
   destinationAssetAccountId: string;
 };
 
+export type MealPlanFundingTransaction = BaseTransaction & {
+  type: "meal-plan-funding";
+  paymentAccountType: "asset" | "liability";
+  paymentAccountId: string;
+  mealPlanAccountId: string;
+};
+
+export type MealPlanUseTransaction = BaseTransaction & {
+  type: "meal-plan-use";
+  mealPlanAccountId: string;
+  category: "groceries" | "dining-out";
+};
+
 export type Transaction =
   | IncomeTransaction
   | ExpenseTransaction
   | BorrowingTransaction
   | DebtPaymentTransaction
-  | TransferTransaction;
+  | TransferTransaction
+  | MealPlanFundingTransaction
+  | MealPlanUseTransaction;
 
 export type AccountingData = {
   version: 1;
   assetAccounts: AssetAccount[];
   liabilityAccounts: LiabilityAccount[];
+  mealPlanAccounts?: MealPlanAccount[];
   transactions: Transaction[];
   profile?: StudentProfile;
   obligations?: Obligation[];
@@ -148,6 +182,7 @@ export type StudentProfile = {
   expectedIncomeSource?: string;
   nextIncomeDate?: string;
   nextIncomeAmount?: number;
+  housingSituation?: HousingSituation;
 };
 
 export type Obligation = {
@@ -162,6 +197,7 @@ export type MonthlyPlan = {
   month: string;
   expectedIncome: number;
   categoryBudgets: Partial<Record<ExpenseCategory, number>>;
+  categoryBudgetCadences?: Partial<Record<ExpenseCategory, BudgetCadence>>;
   plannedDebtPayment: number;
   plannedSavings: number;
   safetyBuffer: number;
@@ -186,6 +222,8 @@ export type FinancialPosition = {
   assetBalances: AccountBalance[];
   liabilityBalances: AccountBalance[];
   totalCash: number;
+  restrictedBalances?: AccountBalance[];
+  totalRestricted?: number;
   totalLiabilities: number;
   netFinancialPosition: number;
 };
@@ -205,6 +243,7 @@ export type PeriodReport = {
   incomeFunding: number;
   borrowedFunds: number;
   cashExpensesPaid: number;
+  mealPlanFundingCash: number;
   debtPayments: number;
   debtPrincipalPaid: number;
   interestExpensePaid: number;
@@ -221,5 +260,6 @@ export type PeriodReport = {
   netPositionChange: number;
   liabilityBorrowing: number;
   liabilityPurchases: number;
+  liabilityMealPlanFunding: number;
   observations: string[];
 };

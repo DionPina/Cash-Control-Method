@@ -68,6 +68,8 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   borrowing: "Borrowing",
   "debt-payment": "Debt payment",
   transfer: "Transfer",
+  "meal-plan-funding": "Add to meal plan",
+  "meal-plan-use": "Meal-plan purchase",
 };
 
 export const RECORD_CHOICES: Array<{
@@ -80,6 +82,8 @@ export const RECORD_CHOICES: Array<{
   { value: "borrowing", label: "I borrowed money", helper: "Loan proceeds received" },
   { value: "debt-payment", label: "I paid debt", helper: "Principal and optional interest" },
   { value: "transfer", label: "I moved money", helper: "Between your cash accounts" },
+  { value: "meal-plan-funding", label: "I funded a meal plan", helper: "Move cash or credit into restricted food value" },
+  { value: "meal-plan-use", label: "I used a meal plan", helper: "Record food without reducing cash again" },
 ];
 
 export function getLabel<T extends string>(

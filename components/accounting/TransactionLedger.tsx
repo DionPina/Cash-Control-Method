@@ -14,6 +14,7 @@ import {
   sortTransactionsNewestFirst,
   transactionReferencesAsset,
   transactionReferencesLiability,
+  transactionReferencesMealPlan,
 } from "@/lib/accounting/engine";
 import { formatCurrency } from "@/lib/accounting/format";
 import type {
@@ -68,9 +69,9 @@ export default function TransactionLedger({
       if (categoryFilter && transactionCategoryValue(transaction) !== categoryFilter) return false;
       if (accountFilter) {
         const [kind, id] = accountFilter.split(":");
-        const matches = kind === "asset"
-          ? transactionReferencesAsset(transaction, id)
-          : transactionReferencesLiability(transaction, id);
+        const matches = kind === "asset" ? transactionReferencesAsset(transaction, id)
+          : kind === "liability" ? transactionReferencesLiability(transaction, id)
+          : transactionReferencesMealPlan(transaction, id);
         if (!matches) return false;
       }
       return true;
@@ -126,6 +127,7 @@ export default function TransactionLedger({
             <option value="">All accounts</option>
             <optgroup label="Cash accounts">{data.assetAccounts.map((account) => <option key={account.id} value={`asset:${account.id}`}>{account.name}</option>)}</optgroup>
             <optgroup label="Liabilities">{data.liabilityAccounts.map((account) => <option key={account.id} value={`liability:${account.id}`}>{account.name}</option>)}</optgroup>
+            <optgroup label="Meal plans">{(data.mealPlanAccounts ?? []).map((account) => <option key={account.id} value={`meal-plan:${account.id}`}>{account.name}</option>)}</optgroup>
           </SelectInput>
           <SelectInput aria-label="Filter by transaction type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "" | TransactionType)}>
             <option value="">All transaction types</option>
@@ -205,6 +207,7 @@ function transactionCategoryValue(transaction: Transaction): string {
   if (transaction.type === "income") return `income:${transaction.category}`;
   if (transaction.type === "expense") return `expense:${transaction.category}`;
   if (transaction.type === "debt-payment" && transaction.interestAmount > 0) return "expense:interest";
+  if (transaction.type === "meal-plan-use") return `expense:${transaction.category}`;
   return "";
 }
 
@@ -212,5 +215,6 @@ function transactionCategoryLabel(transaction: Transaction): string {
   if (transaction.type === "income") return getLabel(INCOME_CATEGORIES, transaction.category);
   if (transaction.type === "expense") return getLabel(EXPENSE_CATEGORIES, transaction.category);
   if (transaction.type === "debt-payment" && transaction.interestAmount > 0) return "Interest";
+  if (transaction.type === "meal-plan-use") return getLabel(EXPENSE_CATEGORIES, transaction.category);
   return "—";
 }

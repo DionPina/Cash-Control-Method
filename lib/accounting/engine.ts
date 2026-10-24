@@ -3,6 +3,7 @@ import type {
   AssetAccount,
   FinancialPosition,
   LiabilityAccount,
+  MealPlanAccount,
   Transaction,
 } from "./types.ts";
 
@@ -40,6 +41,10 @@ export function transactionReferencesAsset(
         transaction.sourceAssetAccountId === accountId ||
         transaction.destinationAssetAccountId === accountId
       );
+    case "meal-plan-funding":
+      return transaction.paymentAccountType === "asset" && transaction.paymentAccountId === accountId;
+    case "meal-plan-use":
+      return false;
   }
 }
 
@@ -53,6 +58,8 @@ export function transactionReferencesLiability(
     case "borrowing":
     case "debt-payment":
       return transaction.liabilityAccountId === accountId;
+    case "meal-plan-funding":
+      return transaction.paymentAccountType === "liability" && transaction.paymentAccountId === accountId;
     default:
       return false;
   }
@@ -100,6 +107,12 @@ export function calculateAssetBalance(
           return balance + transaction.amount;
         }
         return balance;
+      case "meal-plan-funding":
+        return transaction.paymentAccountType === "asset" && transaction.paymentAccountId === account.id
+          ? balance - transaction.amount
+          : balance;
+      case "meal-plan-use":
+        return balance;
     }
   }, account.openingBalance);
 }
@@ -134,9 +147,33 @@ export function calculateLiabilityBalance(
         return transaction.liabilityAccountId === account.id
           ? balance - transaction.principalAmount
           : balance;
+      case "meal-plan-funding":
+        return transaction.paymentAccountType === "liability" && transaction.paymentAccountId === account.id
+          ? balance + transaction.amount
+          : balance;
       default:
         return balance;
     }
+  }, account.openingBalance);
+}
+
+export function transactionReferencesMealPlan(transaction: Transaction, accountId: string): boolean {
+  return (transaction.type === "meal-plan-funding" || transaction.type === "meal-plan-use") &&
+    transaction.mealPlanAccountId === accountId;
+}
+
+export function calculateMealPlanBalance(
+  account: MealPlanAccount,
+  transactions: Transaction[],
+  boundary: Boundary,
+  excludedTransactionId?: string,
+): number {
+  if (!accountIsOpen(account.openingBalanceDate, boundary)) return 0;
+  return transactions.reduce((balance, transaction) => {
+    if (transaction.id === excludedTransactionId || !transactionIsIncluded(transaction, boundary)) return balance;
+    if (transaction.type === "meal-plan-funding" && transaction.mealPlanAccountId === account.id) return balance + transaction.amount;
+    if (transaction.type === "meal-plan-use" && transaction.mealPlanAccountId === account.id) return balance - transaction.amount;
+    return balance;
   }, account.openingBalance);
 }
 
@@ -163,13 +200,19 @@ export function calculateFinancialPosition(
     (sum, account) => sum + account.balance,
     0,
   );
+  const restrictedBalances = (data.mealPlanAccounts ?? [])
+    .filter((account) => account.openingBalanceDate <= boundary.date)
+    .map((account) => ({ id: account.id, name: account.name, balance: calculateMealPlanBalance(account, data.transactions, boundary) }));
+  const totalRestricted = restrictedBalances.reduce((sum, account) => sum + account.balance, 0);
 
   return {
     assetBalances,
     liabilityBalances,
     totalCash,
+    restrictedBalances,
+    totalRestricted,
     totalLiabilities,
-    netFinancialPosition: totalCash - totalLiabilities,
+    netFinancialPosition: totalCash + totalRestricted - totalLiabilities,
   };
 }
 
@@ -199,6 +242,13 @@ export function accountNameForTransaction(
       return `${assetName(transaction.cashAccountId)} → ${liabilityName(transaction.liabilityAccountId)}`;
     case "transfer":
       return `${assetName(transaction.sourceAssetAccountId)} → ${assetName(transaction.destinationAssetAccountId)}`;
+    case "meal-plan-funding": {
+      const source = transaction.paymentAccountType === "asset" ? assetName(transaction.paymentAccountId) : liabilityName(transaction.paymentAccountId);
+      const mealPlan = data.mealPlanAccounts?.find((account) => account.id === transaction.mealPlanAccountId)?.name ?? "Missing meal plan";
+      return `${source} → ${mealPlan}`;
+    }
+    case "meal-plan-use":
+      return data.mealPlanAccounts?.find((account) => account.id === transaction.mealPlanAccountId)?.name ?? "Missing meal plan";
   }
 }
 

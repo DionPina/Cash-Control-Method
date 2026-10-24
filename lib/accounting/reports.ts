@@ -50,6 +50,9 @@ function expenseEntries(transactions: Transaction[]): ExpenseEntry[] {
         },
       ];
     }
+    if (transaction.type === "meal-plan-use") {
+      return [{ description: transaction.description, amount: transaction.amount, category: transaction.category }];
+    }
     return [];
   });
 }
@@ -143,6 +146,10 @@ export function generatePeriodReport(
       sum + (transaction.type === "debt-payment" ? transaction.amount : 0),
     0,
   );
+  const mealPlanFundingCash = transactions.reduce(
+    (sum, transaction) => sum + (transaction.type === "meal-plan-funding" && transaction.paymentAccountType === "asset" ? transaction.amount : 0),
+    0,
+  );
   const debtPrincipalPaid = transactions.reduce(
     (sum, transaction) =>
       sum + (transaction.type === "debt-payment" ? transaction.principalAmount : 0),
@@ -172,6 +179,10 @@ export function generatePeriodReport(
         : 0),
     0,
   );
+  const liabilityMealPlanFunding = transactions.reduce(
+    (sum, transaction) => sum + (transaction.type === "meal-plan-funding" && transaction.paymentAccountType === "liability" ? transaction.amount : 0),
+    0,
+  );
 
   const reportWithoutObservations: Omit<PeriodReport, "observations"> = {
     startDate,
@@ -182,6 +193,7 @@ export function generatePeriodReport(
     incomeFunding,
     borrowedFunds,
     cashExpensesPaid,
+    mealPlanFundingCash,
     debtPayments,
     debtPrincipalPaid,
     interestExpensePaid,
@@ -205,6 +217,7 @@ export function generatePeriodReport(
       endingPosition.netFinancialPosition - beginningPosition.netFinancialPosition,
     liabilityBorrowing,
     liabilityPurchases,
+    liabilityMealPlanFunding,
   };
 
   return {

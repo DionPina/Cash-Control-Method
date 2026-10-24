@@ -4,8 +4,8 @@ import { EXPENSE_CATEGORIES, getLabel } from "@/lib/accounting/constants";
 import { formatDate, todayIso } from "@/lib/accounting/dates";
 import { currentFinancialPosition, sortTransactionsNewestFirst } from "@/lib/accounting/engine";
 import { formatCurrency } from "@/lib/accounting/format";
-import { budgetVariances, calculatePlanProgress, calculateSafeToSpend, planForMonth } from "@/lib/accounting/planning";
-import { generateMonthlyReport, generateWeeklyReport } from "@/lib/accounting/reports";
+import { budgetAmountForWeek, budgetVariances, calculatePlanProgress, calculateSafeToSpend, planForMonth } from "@/lib/accounting/planning";
+import { generateMonthlyReport, generatePeriodReport, generateWeeklyReport } from "@/lib/accounting/reports";
 import type { AccountingData, ExpenseCategory } from "@/lib/accounting/types";
 
 import { EmptyState, PrimaryButton, SectionCard, SectionHeading, SecondaryButton, StatusPill } from "./ui";
@@ -20,6 +20,7 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
   const month = today.slice(0, 7);
   const position = currentFinancialPosition(data, today);
   const weekly = generateWeeklyReport(data, today);
+  const daily = generatePeriodReport(data, today, today);
   const monthly = generateMonthlyReport(data, today);
   const plan = planForMonth(data, month);
   const progress = calculatePlanProgress(data, today);
@@ -31,12 +32,16 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
   const hasPlan = plan.expectedIncome > 0 || Object.values(plan.categoryBudgets).some((value) => (value ?? 0) > 0);
   const name = data.profile?.firstName ? `, ${data.profile.firstName}` : "";
   const topWeekly = weekly.expenseBreakdown.slice(0, 4);
+  const groceriesThisWeek = weekly.expenseBreakdown.find((item) => item.category === "groceries")?.amount ?? 0;
+  const diningThisWeek = weekly.expenseBreakdown.find((item) => item.category === "dining-out")?.amount ?? 0;
+  const groceryPlan = budgetAmountForWeek(plan.categoryBudgets.groceries ?? 0, plan.categoryBudgetCadences?.groceries);
+  const diningPlan = budgetAmountForWeek(plan.categoryBudgets["dining-out"] ?? 0, plan.categoryBudgetCadences?.["dining-out"]);
   const upcoming = upcomingObligations(data, today).slice(0, 4);
   const insight = buildInsight({ available: progress.availableAfterPlan, pending: pending.length, uncategorized: uncategorized.length, topCategory: topWeekly[0]?.category, topAmount: topWeekly[0]?.amount, hasPlan });
 
   return (
     <div className="space-y-6">
-      <SectionHeading eyebrow="Home" title={`Here’s your money picture${name}`} description="Start with what needs your attention now. Open the details only when you need them." action={<PrimaryButton type="button" onClick={() => onNavigate("record")}>Record what happened</PrimaryButton>} />
+      <SectionHeading eyebrow="Today" title={`Here’s what matters now${name}`} description="A short view of today, this week, and the money that must last until your next income." action={<PrimaryButton type="button" onClick={() => onNavigate("record")}>Record what happened</PrimaryButton>} />
 
       <section className="overflow-hidden rounded-[2rem] bg-[#020b24] p-6 text-white shadow-sm sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
@@ -54,6 +59,18 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
           </dl>
         </div>
       </section>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <LightMetric label="Spent today" value={daily.totalExpensesIncurred} />
+        <LightMetric label="Cash used today" value={daily.cashExpensesPaid + daily.debtPayments + daily.mealPlanFundingCash} />
+        <LightMetric label="Money received today" value={daily.incomeFunding} />
+        <LightMetric label="Meal-plan value" value={position.totalRestricted ?? 0} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <WeeklyPace label="Groceries this week" actual={groceriesThisWeek} planned={groceryPlan} />
+        <WeeklyPace label="Dining out this week" actual={diningThisWeek} planned={diningPlan} />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <SectionCard>
@@ -94,6 +111,7 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
 
 function DarkMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl bg-white/10 p-3"><dt className="text-xs text-slate-300">{label}</dt><dd className="mt-1 font-semibold text-white">{formatCurrency(value)}</dd></div>; }
 function LightMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold text-[#020b24]">{formatCurrency(value)}</p></div>; }
+function WeeklyPace({ label, actual, planned }: { label: string; actual: number; planned: number }) { const remaining = planned - actual; const width = planned > 0 ? Math.min(100, (actual / planned) * 100) : 0; return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-[#020b24]">{label}</p><p className="mt-1 text-xs text-slate-500">{planned > 0 ? remaining >= 0 ? `${formatCurrency(remaining)} left from ${formatCurrency(planned)}` : `${formatCurrency(Math.abs(remaining))} over the weekly plan` : "Add a weekly amount in Plan"}</p></div><p className="font-semibold text-[#020b24]">{formatCurrency(actual)}</p></div>{planned > 0 && <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${remaining < 0 ? "bg-amber-500" : "bg-sky-600"}`} style={{ width: `${width}%` }} /></div>}</div>; }
 function AttentionRow({ label, value, action }: { label: string; value: number; action: () => void }) { return <button type="button" onClick={action} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-sky-300"><span className="text-slate-600">{label}</span><span className={`font-semibold ${value > 0 ? "text-amber-800" : "text-[#020b24]"}`}>{value}</span></button>; }
 
 function buildInsight({ available, pending, uncategorized, topCategory, topAmount, hasPlan }: { available: number; pending: number; uncategorized: number; topCategory?: ExpenseCategory; topAmount?: number; hasPlan: boolean }): string {

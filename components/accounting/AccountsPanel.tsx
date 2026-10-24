@@ -11,6 +11,8 @@ import { formatDate, todayIso } from "@/lib/accounting/dates";
 import {
   calculateAssetBalance,
   calculateLiabilityBalance,
+  calculateMealPlanBalance,
+  transactionReferencesMealPlan,
 } from "@/lib/accounting/engine";
 import { formatCurrency, parseNonNegativeAmount } from "@/lib/accounting/format";
 import { createId } from "@/lib/accounting/id";
@@ -20,6 +22,8 @@ import type {
   AssetAccountType,
   LiabilityAccount,
   LiabilityAccountType,
+  MealPlanAccount,
+  MealPlanType,
 } from "@/lib/accounting/types";
 import {
   assetAccountHasTransactions,
@@ -46,6 +50,8 @@ type AccountsPanelProps = {
   onSaveLiability: (account: LiabilityAccount) => void;
   onDeleteAsset: (id: string) => void;
   onDeleteLiability: (id: string) => void;
+  onSaveMealPlan: (account: MealPlanAccount) => void;
+  onDeleteMealPlan: (id: string) => void;
 };
 
 export default function AccountsPanel({
@@ -54,10 +60,13 @@ export default function AccountsPanel({
   onSaveLiability,
   onDeleteAsset,
   onDeleteLiability,
+  onSaveMealPlan,
+  onDeleteMealPlan,
 }: AccountsPanelProps) {
-  const [formType, setFormType] = useState<"asset" | "liability" | null>(null);
+  const [formType, setFormType] = useState<"asset" | "liability" | "meal-plan" | null>(null);
   const [editingAsset, setEditingAsset] = useState<AssetAccount | null>(null);
   const [editingLiability, setEditingLiability] = useState<LiabilityAccount | null>(null);
+  const [editingMealPlan, setEditingMealPlan] = useState<MealPlanAccount | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const today = todayIso();
 
@@ -65,6 +74,7 @@ export default function AccountsPanel({
     setFormType(null);
     setEditingAsset(null);
     setEditingLiability(null);
+    setEditingMealPlan(null);
   };
 
   const requestAssetDelete = (account: AssetAccount) => {
@@ -119,6 +129,7 @@ export default function AccountsPanel({
             >
               Add liability
             </PrimaryButton>
+            <SecondaryButton type="button" onClick={() => { setEditingMealPlan(null); setFormType("meal-plan"); }}>Add meal plan</SecondaryButton>
           </div>
         }
       />
@@ -154,6 +165,7 @@ export default function AccountsPanel({
           }}
         />
       )}
+      {formType === "meal-plan" && <MealPlanForm account={editingMealPlan} onCancel={closeForm} onSave={(account) => { onSaveMealPlan(account); setMessage(`${account.name} was saved.`); closeForm(); }} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard>
@@ -236,11 +248,36 @@ export default function AccountsPanel({
         </SectionCard>
       </div>
 
+      <SectionCard>
+        <SectionHeading eyebrow="Restricted food value" title="Meal plans" description="Meal-plan balances help cover food, but they are not included in spendable cash." />
+        {(data.mealPlanAccounts ?? []).length === 0 ? <div className="mt-5"><EmptyState title="No meal plan added" description="Add dining dollars, a swipe plan, or an unlimited campus plan when it applies to you." /></div> : <div className="mt-5 grid gap-3 md:grid-cols-2">{(data.mealPlanAccounts ?? []).map((account) => {
+          const balance = calculateMealPlanBalance(account, data.transactions, { date: today, includeDate: true });
+          return <AccountCard key={account.id} name={account.name} type={account.type === "declining-balance" ? "Dining dollars / declining balance" : account.type === "swipes" ? "Meal swipes" : "Unlimited plan"} openingBalance={account.openingBalance} openingDate={account.openingBalanceDate} currentBalance={balance} details={account.swipesRemaining !== undefined ? `${account.swipesRemaining} swipes noted` : account.semesterCost !== undefined ? `${formatCurrency(account.semesterCost)} semester cost` : undefined} onEdit={() => { setEditingMealPlan(account); setFormType("meal-plan"); }} onDelete={() => {
+            if (data.transactions.some((transaction) => transactionReferencesMealPlan(transaction, account.id))) return setMessage(`${account.name} cannot be deleted because ledger transactions reference it.`);
+            if (window.confirm(`Delete ${account.name}? This cannot be undone.`)) onDeleteMealPlan(account.id);
+          }} />;
+        })}</div>}
+      </SectionCard>
+
       <p className="rounded-2xl bg-sky-50 px-4 py-3 text-sm text-slate-700">
         Borrowed money can increase cash, but it also increases what you owe. Cash Control keeps both sides visible.
       </p>
     </div>
   );
+}
+
+function MealPlanForm({ account, onSave, onCancel }: { account: MealPlanAccount | null; onSave: (account: MealPlanAccount) => void; onCancel: () => void }) {
+  const [name, setName] = useState(account?.name ?? "Campus meal plan");
+  const [type, setType] = useState<MealPlanType>(account?.type ?? "declining-balance");
+  const [openingBalance, setOpeningBalance] = useState(account ? String(account.openingBalance) : "");
+  const [semesterCost, setSemesterCost] = useState(account?.semesterCost === undefined ? "" : String(account.semesterCost));
+  const [swipes, setSwipes] = useState(account?.swipesRemaining === undefined ? "" : String(account.swipesRemaining));
+  const submit = () => {
+    const balance = parseNonNegativeAmount(openingBalance);
+    if (!name.trim() || balance === null) return;
+    onSave({ id: account?.id ?? createId("meal-plan"), name: name.trim(), type, openingBalance: balance, openingBalanceDate: account?.openingBalanceDate ?? todayIso(), semesterCost: semesterCost.trim() ? parseNonNegativeAmount(semesterCost) ?? undefined : undefined, swipesRemaining: type === "swipes" && swipes.trim() ? parseNonNegativeAmount(swipes) ?? undefined : undefined });
+  };
+  return <SectionCard><SectionHeading eyebrow={account ? "Edit meal plan" : "New meal plan"} title="Restricted food value" description="This balance stays separate from cash you can use anywhere." /><div className="mt-5 grid gap-4 md:grid-cols-2"><Field label="Plan name"><TextInput value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label="Plan type"><SelectInput value={type} onChange={(event) => setType(event.target.value as MealPlanType)}><option value="declining-balance">Dining dollars / declining balance</option><option value="swipes">Fixed swipes</option><option value="unlimited">Unlimited</option></SelectInput></Field><Field label="Available restricted balance"><TextInput inputMode="decimal" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} placeholder="0.00" /></Field><Field label="Semester cost (optional)"><TextInput inputMode="decimal" value={semesterCost} onChange={(event) => setSemesterCost(event.target.value)} placeholder="0.00" /></Field>{type === "swipes" && <Field label="Swipes remaining"><TextInput inputMode="numeric" value={swipes} onChange={(event) => setSwipes(event.target.value)} placeholder="0" /></Field>}</div><div className="mt-5 flex gap-2"><PrimaryButton type="button" onClick={submit}>Save meal plan</PrimaryButton><SecondaryButton type="button" onClick={onCancel}>Cancel</SecondaryButton></div></SectionCard>;
 }
 
 function AccountCard({

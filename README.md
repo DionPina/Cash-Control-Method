@@ -5,9 +5,10 @@ college students. It uses one transaction ledger to calculate cash,
 liabilities, net financial position, and weekly/monthly reports.
 
 The current experience includes guided first-time setup, a connected monthly
-plan, a before-payday safe-to-spend guardrail, category budgets,
-required-payment reminders, savings goals, budget-versus-actual comparisons,
-and separate weekly and monthly reviews.
+plan, a before-payday safe-to-spend guardrail, category budgets with natural
+daily/weekly/monthly/semester timing, required-payment reminders, savings
+goals, restricted meal-plan balances, budget-versus-actual comparisons, and
+separate daily, weekly, and monthly reviews.
 See [PRODUCT_VISION.md](./PRODUCT_VISION.md) for the product principles and
 decision framework.
 
@@ -53,6 +54,19 @@ explore the app without making sample records the default.
   before the next expected income, pending cash outflows, unfinished savings,
   and the selected cash cushion. It falls back to month-end when no future
   income date is saved.
+- Weekly grocery, dining, transportation, and other flexible amounts remain
+  weekly in the interface and are normalized with `52 ÷ 12` only when a monthly
+  comparison needs them.
+
+## Meal plans
+
+Meal-plan value is tracked separately from cash that can be spent anywhere.
+Funding a declining-balance plan moves value from cash or a liability into a
+restricted meal-plan balance; it is not counted as a food expense at that
+moment. Recording meal-plan use reduces the restricted balance and recognizes
+groceries or dining-out spending without reducing cash a second time. Swipe
+and unlimited plans can also be listed for coverage context, while monetary
+usage recording remains optional.
 
 ## Accounting model
 

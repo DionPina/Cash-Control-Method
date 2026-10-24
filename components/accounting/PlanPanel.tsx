@@ -10,6 +10,7 @@ import { budgetVariances, calculatePlanProgress, calculateSafeToSpend, planForMo
 import { generatePeriodReport } from "@/lib/accounting/reports";
 import type {
   AccountingData,
+  BudgetCadence,
   ExpenseCategory,
   MonthlyPlan,
   Obligation,
@@ -47,6 +48,13 @@ const coreCategories = planCategories.filter((category) =>
 const additionalCategories = planCategories.filter(
   (category) => !coreCategoryValues.includes(category.value),
 );
+const cadenceOptions: Array<{ value: BudgetCadence; label: string }> = [
+  { value: "daily", label: "per day" },
+  { value: "weekly", label: "per week" },
+  { value: "monthly", label: "per month" },
+  { value: "semester", label: "per semester" },
+  { value: "one-time", label: "one time" },
+];
 
 export default function PlanPanel({
   data,
@@ -96,6 +104,14 @@ export default function PlanPanel({
         ...current.categoryBudgets,
         [category]: parseNonNegativeAmount(raw) ?? 0,
       },
+    }));
+    setSaved(false);
+  };
+
+  const updateCadence = (category: ExpenseCategory, cadence: BudgetCadence) => {
+    setPlan((current) => ({
+      ...current,
+      categoryBudgetCadences: { ...current.categoryBudgetCadences, [category]: cadence },
     }));
     setSaved(false);
   };
@@ -150,21 +166,17 @@ export default function PlanPanel({
 
         <div className="mt-8">
           <h3 className="font-semibold text-[#020b24]">Spending categories</h3>
-          <p className="mt-1 text-sm text-slate-600">Add only the categories that matter to your plan. Blank categories stay out of the way.</p>
+          <p className="mt-1 text-sm text-slate-600">Use the frequency that is easiest to estimate. Weekly amounts stay weekly here and are converted only when a monthly total needs them.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {coreCategories.map((category) => (
-              <Field key={category.value} label={category.label}>
-                <MoneyInput value={plan.categoryBudgets[category.value] ?? 0} onChange={(value) => updateCategory(category.value, value)} />
-              </Field>
+              <BudgetField key={category.value} label={category.label} value={plan.categoryBudgets[category.value] ?? 0} cadence={plan.categoryBudgetCadences?.[category.value] ?? "monthly"} onAmount={(value) => updateCategory(category.value, value)} onCadence={(value) => updateCadence(category.value, value)} />
             ))}
           </div>
           <details className="mt-5 rounded-2xl border border-[#decfb0] bg-white p-4">
             <summary className="cursor-pointer text-sm font-semibold text-[#020b24]">Add more spending categories</summary>
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {additionalCategories.map((category) => (
-                <Field key={category.value} label={category.label}>
-                  <MoneyInput value={plan.categoryBudgets[category.value] ?? 0} onChange={(value) => updateCategory(category.value, value)} />
-                </Field>
+                <BudgetField key={category.value} label={category.label} value={plan.categoryBudgets[category.value] ?? 0} cadence={plan.categoryBudgetCadences?.[category.value] ?? "monthly"} onAmount={(value) => updateCategory(category.value, value)} onCadence={(value) => updateCadence(category.value, value)} />
               ))}
             </div>
           </details>
@@ -221,6 +233,10 @@ export default function PlanPanel({
 
 function MoneyInput({ value, onChange }: { value: number; onChange: (value: string) => void }) {
   return <TextInput inputMode="decimal" value={value || ""} onChange={(event) => onChange(event.target.value)} placeholder="0.00" />;
+}
+
+function BudgetField({ label, value, cadence, onAmount, onCadence }: { label: string; value: number; cadence: BudgetCadence; onAmount: (value: string) => void; onCadence: (value: BudgetCadence) => void }) {
+  return <div><Field label={label}><MoneyInput value={value} onChange={onAmount} /></Field><SelectInput aria-label={`${label} frequency`} className="mt-2" value={cadence} onChange={(event) => onCadence(event.target.value as BudgetCadence)}>{cadenceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></div>;
 }
 
 function PlanMetric({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {

@@ -14,16 +14,15 @@ import PlanPanel from "./PlanPanel";
 import ReportsPanel from "./ReportsPanel";
 import TransactionForm from "./TransactionForm";
 import TransactionLedger from "./TransactionLedger";
-import { DangerButton, SecondaryButton } from "./ui";
+import { DangerButton, PrimaryButton, SecondaryButton } from "./ui";
 
 type AppArea = "home" | "record" | "plan" | "activity" | "reviews" | "accounts";
 
 const areas: Array<{ id: AppArea; label: string; helper: string }> = [
-  { id: "home", label: "Home", helper: "What matters now" },
-  { id: "record", label: "Record", helper: "What happened" },
-  { id: "plan", label: "Plan", helper: "Give money a purpose" },
-  { id: "activity", label: "Activity", helper: "Review your records" },
-  { id: "reviews", label: "Reviews", helper: "Weekly and monthly" },
+  { id: "home", label: "Today", helper: "What matters now" },
+  { id: "record", label: "Record", helper: "Add what happened" },
+  { id: "plan", label: "Plan", helper: "What money must cover" },
+  { id: "reviews", label: "Review", helper: "Daily, weekly, monthly" },
 ];
 
 export default function CashControlApp() {
@@ -50,6 +49,7 @@ export default function CashControlApp() {
     const hasData =
       store.data.assetAccounts.length > 0 ||
       store.data.liabilityAccounts.length > 0 ||
+      (store.data.mealPlanAccounts ?? []).length > 0 ||
       store.data.transactions.length > 0;
     if (
       !hasData ||
@@ -127,30 +127,32 @@ export default function CashControlApp() {
   return (
     <section className="bg-[#f5f7fa] pb-16">
       <div className="mx-auto max-w-7xl px-4 pt-8 md:pt-10">
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
+          <div className="flex items-center justify-between gap-3 px-2 py-2">
             <div>
-              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-sky-700">Your Cash Control</p>
-              <h2 className="mt-1 text-xl font-semibold text-[#020b24]">
-                A clear plan built from what actually happened.
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Record once. Your plan, weekly check-in, and monthly review update together.
-              </p>
+              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-sky-700">Cash Control</p>
+              <h2 className="mt-1 text-lg font-semibold text-[#020b24]">Your money, one clear next step.</h2>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <SecondaryButton type="button" onClick={loadSampleData}>
-                Load sample data
-              </SecondaryButton>
-              <SecondaryButton type="button" onClick={() => setActiveArea("accounts")}>
-                Accounts & setup
-              </SecondaryButton>
-              <SecondaryButton type="button" onClick={exportBackup}>
-                Export backup
-              </SecondaryButton>
-              <SecondaryButton type="button" onClick={() => importInput.current?.click()}>
-                Import backup
-              </SecondaryButton>
+            <PrimaryButton type="button" className="shrink-0" onClick={() => navigate("record")}>+ Record</PrimaryButton>
+          </div>
+
+          <nav className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 md:grid-cols-4" aria-label="Cash Control application">
+            {areas.map((area) => (
+              <button key={area.id} type="button" aria-current={activeArea === area.id ? "page" : undefined} onClick={() => navigate(area.id)} className={`rounded-xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${activeArea === area.id ? "bg-[#020b24] text-white" : "bg-slate-50 text-[#020b24] hover:bg-sky-50"}`}>
+                <span className="block text-sm font-semibold">{area.label}</span>
+                <span className={`mt-0.5 hidden text-xs sm:block ${activeArea === area.id ? "text-slate-300" : "text-slate-500"}`}>{area.helper}</span>
+              </button>
+            ))}
+          </nav>
+
+          <details className="mt-3 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer px-2 text-sm font-medium text-slate-600">Settings & data</summary>
+            <div className="mt-3 flex flex-wrap gap-2 px-2 pb-1">
+              <SecondaryButton type="button" onClick={() => setActiveArea("accounts")}>Accounts and meal plans</SecondaryButton>
+              <SecondaryButton type="button" onClick={() => setActiveArea("activity")}>Full transaction ledger</SecondaryButton>
+              <SecondaryButton type="button" onClick={exportBackup}>Export backup</SecondaryButton>
+              <SecondaryButton type="button" onClick={() => importInput.current?.click()}>Import backup</SecondaryButton>
+              <SecondaryButton type="button" onClick={loadSampleData}>Load sample data</SecondaryButton>
               <input
                 ref={importInput}
                 type="file"
@@ -159,32 +161,9 @@ export default function CashControlApp() {
                 aria-label="Choose a Cash Control JSON backup"
                 onChange={(event) => void importBackup(event.target.files?.[0])}
               />
-              <DangerButton type="button" onClick={clearAllData}>
-                Clear all data
-              </DangerButton>
+              <DangerButton type="button" className="sm:ml-auto" onClick={clearAllData}>Clear all data</DangerButton>
             </div>
-          </div>
-
-          <nav className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-5" aria-label="Cash Control application">
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                type="button"
-                aria-current={activeArea === area.id ? "page" : undefined}
-                onClick={() => navigate(area.id)}
-                className={`rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
-                  activeArea === area.id
-                    ? "border-[#020b24] bg-[#020b24] text-white"
-                    : "border-slate-200 bg-slate-50 text-[#020b24] hover:border-[#decfb0] hover:bg-[#fdfaf4]"
-                }`}
-              >
-                <span className="block text-sm font-semibold">{area.label}</span>
-                <span className={`mt-0.5 block text-xs ${activeArea === area.id ? "text-slate-300" : "text-slate-500"}`}>
-                  {area.helper}
-                </span>
-              </button>
-            ))}
-          </nav>
+          </details>
         </div>
 
         {store.storageMessage && (
@@ -256,6 +235,8 @@ export default function CashControlApp() {
               onSaveLiability={store.upsertLiabilityAccount}
               onDeleteAsset={store.deleteAssetAccount}
               onDeleteLiability={store.deleteLiabilityAccount}
+              onSaveMealPlan={store.upsertMealPlanAccount}
+              onDeleteMealPlan={store.deleteMealPlanAccount}
             />
           )}
           {activeArea === "reviews" && <ReportsPanel data={store.data} />}

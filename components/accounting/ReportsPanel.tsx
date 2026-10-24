@@ -6,32 +6,55 @@ import { EXPENSE_CATEGORIES, TRANSACTION_TYPE_LABELS, getLabel } from "@/lib/acc
 import { addDays, formatDate, formatMonth, shiftMonth, startOfWeek, todayIso } from "@/lib/accounting/dates";
 import { accountNameForTransaction } from "@/lib/accounting/engine";
 import { formatCurrency, formatSignedCurrency } from "@/lib/accounting/format";
-import { budgetVariances, planForMonth } from "@/lib/accounting/planning";
-import { generateMonthlyReport, generateWeeklyReport, groupIncomeAndFunding } from "@/lib/accounting/reports";
+import { budgetAmountForWeek, budgetVariances, planForMonth } from "@/lib/accounting/planning";
+import { generateMonthlyReport, generatePeriodReport, generateWeeklyReport, groupIncomeAndFunding } from "@/lib/accounting/reports";
 import type { AccountingData, ExpenseBreakdownItem, PeriodReport } from "@/lib/accounting/types";
 
 import { EmptyState, SecondaryButton, SectionCard, SectionHeading, TextInput } from "./ui";
 
-type ReportView = "weekly" | "monthly";
+type ReportView = "daily" | "weekly" | "monthly";
 
 export default function ReportsPanel({ data }: { data: AccountingData }) {
   const today = todayIso();
-  const [view, setView] = useState<ReportView>("weekly");
+  const [view, setView] = useState<ReportView>("daily");
+  const [dayDate, setDayDate] = useState(today);
   const [weekDate, setWeekDate] = useState(today);
   const [monthDate, setMonthDate] = useState(today.slice(0, 7));
   const weekly = useMemo(() => generateWeeklyReport(data, weekDate), [data, weekDate]);
+  const daily = useMemo(() => generatePeriodReport(data, dayDate, dayDate), [data, dayDate]);
   const monthly = useMemo(() => generateMonthlyReport(data, `${monthDate}-01`), [data, monthDate]);
 
   return (
     <div className="space-y-6">
-      <SectionHeading eyebrow="Reviews" title="Turn your records into better decisions" description="Weekly check-ins stay short and practical. Monthly reviews explain the full story behind your cash, spending, plan, and debt." />
+      <SectionHeading eyebrow="Review" title="Use the right view for the decision" description="Daily and weekly check-ins focus on fast-moving spending. Monthly reviews explain the complete accounting story." />
       <div className="inline-flex rounded-full border border-slate-200 bg-white p-1" role="tablist" aria-label="Review period">
-        {(["weekly", "monthly"] as ReportView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => setView(option)} className={`rounded-full px-5 py-2 text-sm font-semibold transition ${view === option ? "bg-[#020b24] text-white" : "text-slate-600 hover:text-[#020b24]"}`}>{option === "weekly" ? "Weekly check-in" : "Monthly review"}</button>)}
+        {(["daily", "weekly", "monthly"] as ReportView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => setView(option)} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${view === option ? "bg-[#020b24] text-white" : "text-slate-600 hover:text-[#020b24]"}`}>{option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}</button>)}
       </div>
-      {view === "weekly" ? <WeeklyReview data={data} report={weekly} weekDate={weekDate} onDate={setWeekDate} /> : <MonthlyReview data={data} report={monthly} month={monthDate} onMonth={setMonthDate} />}
+      {view === "daily" ? <DailyReview data={data} report={daily} date={dayDate} onDate={setDayDate} /> : view === "weekly" ? <WeeklyReview data={data} report={weekly} weekDate={weekDate} onDate={setWeekDate} /> : <MonthlyReview data={data} report={monthly} month={monthDate} onMonth={setMonthDate} />}
     </div>
   );
 }
+
+function DailyReview({ data, report, date, onDate }: { data: AccountingData; report: PeriodReport; date: string; onDate: (value: string) => void }) {
+  const pending = data.transactions.filter((item) => item.status === "pending" && item.date === date);
+  const plan = planForMonth(data, date.slice(0, 7));
+  const week = generateWeeklyReport(data, date);
+  const groceries = week.expenseBreakdown.find((item) => item.category === "groceries")?.amount ?? 0;
+  const dining = week.expenseBreakdown.find((item) => item.category === "dining-out")?.amount ?? 0;
+  const groceryPlan = budgetAmountForWeek(plan.categoryBudgets.groceries ?? 0, plan.categoryBudgetCadences?.groceries);
+  const diningPlan = budgetAmountForWeek(plan.categoryBudgets["dining-out"] ?? 0, plan.categoryBudgetCadences?.["dining-out"]);
+  const top = report.expenseBreakdown[0];
+  const summary = report.transactions.length === 0 ? "Nothing posted today yet. Record purchases as they happen to keep this view useful." : `You spent ${formatCurrency(report.totalExpensesIncurred)} today${top ? `, led by ${getLabel(EXPENSE_CATEGORIES, top.category)}` : ""}.`;
+  return <div className="space-y-6">
+    <PeriodNavigator title={formatDate(date)} input={<TextInput aria-label="Choose a day" type="date" value={date} onChange={(event) => onDate(event.target.value)} />} onPrevious={() => onDate(addDays(date, -1))} onNext={() => onDate(addDays(date, 1))} />
+    <section className="rounded-[2rem] bg-[#020b24] p-6 text-white sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Today in one sentence</p><h3 className="mt-3 max-w-3xl text-2xl font-semibold leading-snug sm:text-3xl">{summary}</h3></section>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Spent today" value={report.totalExpensesIncurred} /><Metric label="Cash used today" value={report.cashExpensesPaid + report.debtPayments + report.mealPlanFundingCash} /><Metric label="Money received" value={report.incomeFunding} /><Metric label="Pending today" value={pending.length} count /></div>
+    <div className="grid gap-6 lg:grid-cols-2"><SectionCard><SectionHeading eyebrow="Weekly pace" title="Food spending that moves quickly" /><div className="mt-5 space-y-3"><PaceRow label="Groceries" actual={groceries} planned={groceryPlan} /><PaceRow label="Dining out" actual={dining} planned={diningPlan} /></div></SectionCard><SectionCard><SectionHeading eyebrow="Today’s detail" title="What needs attention" />{report.transactions.length === 0 && pending.length === 0 ? <div className="mt-5"><EmptyState title="Nothing to review" description="Today’s posted and pending activity will appear here." /></div> : <ul className="mt-5 space-y-2"><li className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700">{report.transactions.length} posted entr{report.transactions.length === 1 ? "y" : "ies"}</li><li className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700">{pending.length} pending item{pending.length === 1 ? "" : "s"}</li><li className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700">{report.uncategorizedCount} needing a category</li></ul>}</SectionCard></div>
+    <ActivityDetails data={data} report={report} />
+  </div>;
+}
+
+function PaceRow({ label, actual, planned }: { label: string; actual: number; planned: number }) { const remaining = planned - actual; return <div className="rounded-xl bg-white px-4 py-3"><div className="flex items-center justify-between gap-4"><span className="text-sm text-slate-600">{label}</span><span className="font-semibold text-[#020b24]">{formatCurrency(actual)}{planned > 0 ? ` of ${formatCurrency(planned)}` : ""}</span></div><p className={`mt-1 text-xs ${remaining < 0 ? "text-amber-800" : "text-slate-500"}`}>{planned > 0 ? remaining >= 0 ? `${formatCurrency(remaining)} remaining this week` : `${formatCurrency(Math.abs(remaining))} over this week` : "No weekly amount planned"}</p></div>; }
 
 function WeeklyReview({ data, report, weekDate, onDate }: { data: AccountingData; report: PeriodReport; weekDate: string; onDate: (value: string) => void }) {
   const start = startOfWeek(weekDate);
@@ -70,9 +93,9 @@ function MonthlyReview({ data, report, month, onMonth }: { data: AccountingData;
   return <div className="space-y-6">
     <PeriodNavigator title={formatMonth(`${month}-01`)} input={<TextInput aria-label="Choose a month" type="month" value={month} onChange={(event) => onMonth(event.target.value)} />} onPrevious={() => onMonth(shiftMonth(`${month}-01`, -1).slice(0, 7))} onNext={() => onMonth(shiftMonth(`${month}-01`, 1).slice(0, 7))} />
     <section className="rounded-[2rem] bg-[#020b24] p-6 text-white sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Your month in one sentence</p><h3 className="mt-3 max-w-4xl text-2xl font-semibold leading-snug sm:text-3xl">{story}</h3></section>
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Ending cash" value={report.endingPosition.totalCash} /><Metric label="Total expenses" value={report.totalExpensesIncurred} /><Metric label="Ending debt" value={report.endingPosition.totalLiabilities} /><Metric label="Cash minus debt" value={report.endingPosition.netFinancialPosition} /></div>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><Metric label="Ending cash" value={report.endingPosition.totalCash} /><Metric label="Meal-plan value" value={report.endingPosition.totalRestricted ?? 0} /><Metric label="Total expenses" value={report.totalExpensesIncurred} /><Metric label="Ending debt" value={report.endingPosition.totalLiabilities} /><Metric label="Net position" value={report.endingPosition.netFinancialPosition} /></div>
 
-    <SectionCard><SectionHeading eyebrow="Cash movement" title="How cash changed" description="Transfers between your own accounts are left out because they do not change total cash." /><div className="mt-6 grid gap-3 md:grid-cols-5"><FlowStep label="Starting cash" value={report.beginningPosition.totalCash} /><FlowStep label="Money received" value={report.incomeFunding + report.borrowedFunds} plus /><FlowStep label="Cash expenses" value={report.cashExpensesPaid} minus /><FlowStep label="Debt payments" value={report.debtPayments} minus /><FlowStep label="Ending cash" value={report.endingPosition.totalCash} /></div></SectionCard>
+    <SectionCard><SectionHeading eyebrow="Cash movement" title="How cash changed" description="Transfers between cash accounts are left out. Funding a meal plan lowers spendable cash but creates restricted food value." /><div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><FlowStep label="Starting cash" value={report.beginningPosition.totalCash} /><FlowStep label="Money received" value={report.incomeFunding + report.borrowedFunds} plus /><FlowStep label="Cash expenses" value={report.cashExpensesPaid} minus /><FlowStep label="Meal-plan funding" value={report.mealPlanFundingCash} minus /><FlowStep label="Debt payments" value={report.debtPayments} minus /><FlowStep label="Ending cash" value={report.endingPosition.totalCash} /></div></SectionCard>
 
     <div className="grid gap-6 lg:grid-cols-2">
       <SectionCard><SectionHeading eyebrow="Spending" title="Where money went" description="Credit-card purchases count when the purchase happens, not again when the card is paid." /><CategoryBars breakdown={report.expenseBreakdown} /></SectionCard>
@@ -82,7 +105,7 @@ function MonthlyReview({ data, report, month, onMonth }: { data: AccountingData;
     <SectionCard><SectionHeading eyebrow="Plan versus actual" title="How your plan compared with real life" description="The difference helps you adjust the next plan; it is not a score." />{variances.length === 0 ? <div className="mt-5"><EmptyState title="No plan to compare" description="Create a monthly plan to see category-by-category differences here." /></div> : <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="border-b border-[#decfb0] text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3">Category</th><th className="pb-3 text-right">Planned</th><th className="pb-3 text-right">Actual</th><th className="pb-3 text-right">Difference</th></tr></thead><tbody>{variances.map((item) => <tr key={item.category} className="border-b border-[#eadfc9] last:border-0"><td className="py-3 font-medium text-[#020b24]">{getLabel(EXPENSE_CATEGORIES, item.category)}</td><td className="py-3 text-right">{formatCurrency(item.planned)}</td><td className="py-3 text-right">{formatCurrency(item.actual)}</td><td className={`py-3 text-right font-semibold ${item.remaining < 0 ? "text-amber-800" : "text-slate-700"}`}>{item.remaining >= 0 ? `${formatCurrency(item.remaining)} remaining` : `${formatCurrency(Math.abs(item.remaining))} more`}</td></tr>)}</tbody></table></div>}</SectionCard>
 
     <div className="grid gap-6 lg:grid-cols-2">
-      <SectionCard><SectionHeading eyebrow="Debt" title="How money owed changed" /><dl className="mt-5 space-y-2"><MoneyRow label="Starting debt" value={report.beginningPosition.totalLiabilities} /><MoneyRow label="New borrowing" value={report.liabilityBorrowing} /><MoneyRow label="New credit purchases" value={report.liabilityPurchases} /><MoneyRow label="Principal paid" value={report.debtPrincipalPaid} /><MoneyRow label="Cost of borrowing (interest)" value={report.interestExpensePaid} /><MoneyRow label="Ending debt" value={report.endingPosition.totalLiabilities} /></dl></SectionCard>
+      <SectionCard><SectionHeading eyebrow="Debt" title="How money owed changed" /><dl className="mt-5 space-y-2"><MoneyRow label="Starting debt" value={report.beginningPosition.totalLiabilities} /><MoneyRow label="New borrowing" value={report.liabilityBorrowing} /><MoneyRow label="New credit purchases" value={report.liabilityPurchases} /><MoneyRow label="Meal plan charged to debt" value={report.liabilityMealPlanFunding} /><MoneyRow label="Principal paid" value={report.debtPrincipalPaid} /><MoneyRow label="Cost of borrowing (interest)" value={report.interestExpensePaid} /><MoneyRow label="Ending debt" value={report.endingPosition.totalLiabilities} /></dl></SectionCard>
       <SectionCard><SectionHeading eyebrow="What the records show" title="Carry this into next month" /><ul className="mt-5 space-y-2">{report.observations.slice(0, 4).map((item) => <li key={item} className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700">{item}</li>)}</ul></SectionCard>
     </div>
     <ActivityDetails data={data} report={report} />

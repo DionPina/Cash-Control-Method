@@ -10,7 +10,7 @@ export default function Hero() {
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base md:text-lg md:leading-8">
           See what comes in, where it goes, and what needs your attention
-          through simple weekly check-ins and monthly reviews.
+          through quick daily check-ins, weekly pacing, and monthly reviews.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <a

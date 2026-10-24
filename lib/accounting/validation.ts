@@ -1,5 +1,6 @@
 import {
   calculateLiabilityBalance,
+  calculateMealPlanBalance,
   transactionReferencesAsset,
   transactionReferencesLiability,
 } from "./engine.ts";
@@ -98,6 +99,10 @@ function liabilityAccount(
   id: string,
 ): LiabilityAccount | undefined {
   return data.liabilityAccounts.find((account) => account.id === id);
+}
+
+function mealPlanAccount(data: AccountingData, id: string) {
+  return data.mealPlanAccounts?.find((account) => account.id === id);
 }
 
 function validateAccountDate(
@@ -205,6 +210,27 @@ export function validateTransaction(
       }
       validateAccountDate(errors, transaction.date, source);
       validateAccountDate(errors, transaction.date, destination);
+      break;
+    }
+    case "meal-plan-funding": {
+      const source = transaction.paymentAccountType === "asset"
+        ? assetAccount(data, transaction.paymentAccountId)
+        : liabilityAccount(data, transaction.paymentAccountId);
+      const mealPlan = mealPlanAccount(data, transaction.mealPlanAccountId);
+      if (!source) errors.push("Select a valid account used to fund the meal plan.");
+      if (!mealPlan) errors.push("Select a valid meal plan.");
+      validateAccountDate(errors, transaction.date, source);
+      if (mealPlan && transaction.date < mealPlan.openingBalanceDate) errors.push(`The transaction date cannot be before ${mealPlan.name}'s opening balance date.`);
+      break;
+    }
+    case "meal-plan-use": {
+      const mealPlan = mealPlanAccount(data, transaction.mealPlanAccountId);
+      if (!mealPlan) errors.push("Select a valid meal plan.");
+      if (!['groceries', 'dining-out'].includes(transaction.category)) errors.push("Choose groceries or dining out for meal-plan use.");
+      if (mealPlan && transaction.status === "posted") {
+        const balance = calculateMealPlanBalance(mealPlan, data.transactions, { date: transaction.date, includeDate: true }, transaction.id);
+        if (transaction.amount > balance + 0.005) errors.push(`Meal-plan use cannot exceed the ${balance.toLocaleString("en-US", { style: "currency", currency: "USD" })} restricted balance.`);
+      }
       break;
     }
   }

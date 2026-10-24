@@ -1,7 +1,7 @@
 import { endOfMonth, startOfMonth } from "./dates.ts";
 import { currentFinancialPosition } from "./engine.ts";
 import { generatePeriodReport } from "./reports.ts";
-import type { AccountingData, ExpenseCategory, MonthlyPlan, PeriodReport } from "./types.ts";
+import type { AccountingData, BudgetCadence, ExpenseCategory, MonthlyPlan, PeriodReport } from "./types.ts";
 
 export const EMPTY_MONTHLY_PLAN = (month: string): MonthlyPlan => ({
   month,
@@ -17,7 +17,25 @@ export function planForMonth(data: AccountingData, month: string): MonthlyPlan {
 }
 
 export function totalCategoryBudget(plan: MonthlyPlan): number {
-  return Object.values(plan.categoryBudgets).reduce((sum, value) => sum + (value ?? 0), 0);
+  return (Object.entries(plan.categoryBudgets) as Array<[ExpenseCategory, number | undefined]>).reduce(
+    (sum, [category, value]) => sum + budgetAmountForMonth(value ?? 0, plan.categoryBudgetCadences?.[category]),
+    0,
+  );
+}
+
+export function budgetAmountForMonth(amount: number, cadence: BudgetCadence = "monthly"): number {
+  if (cadence === "daily") return amount * (365 / 12);
+  if (cadence === "weekly") return amount * (52 / 12);
+  if (cadence === "semester") return amount / 5;
+  return amount;
+}
+
+export function budgetAmountForWeek(amount: number, cadence: BudgetCadence = "monthly"): number {
+  if (cadence === "daily") return amount * 7;
+  if (cadence === "weekly") return amount;
+  if (cadence === "semester") return amount / 21.7;
+  if (cadence === "one-time") return amount;
+  return amount * (12 / 52);
 }
 
 export type BudgetVariance = {
@@ -34,7 +52,10 @@ export function budgetVariances(plan: MonthlyPlan, report: PeriodReport): Budget
   ]);
   return [...categories]
     .map((category) => {
-      const planned = plan.categoryBudgets[category] ?? 0;
+      const planned = budgetAmountForMonth(
+        plan.categoryBudgets[category] ?? 0,
+        plan.categoryBudgetCadences?.[category],
+      );
       const actual = report.expenseBreakdown.find((item) => item.category === category)?.amount ?? 0;
       return { category, planned, actual, remaining: planned - actual };
     })
@@ -75,7 +96,10 @@ export function calculatePlanProgress(
     (sum, [category, required]) => {
       const actual = periodToDate.expenseBreakdown.find((item) => item.category === category)?.amount ?? 0;
       const requiredRemaining = Math.max(0, required - actual);
-      const budgetRemaining = Math.max(0, (plan.categoryBudgets[category] ?? 0) - actual);
+      const budgetRemaining = Math.max(0, budgetAmountForMonth(
+        plan.categoryBudgets[category] ?? 0,
+        plan.categoryBudgetCadences?.[category],
+      ) - actual);
       return sum + Math.max(0, requiredRemaining - budgetRemaining);
     },
     0,
@@ -136,6 +160,7 @@ export function calculateSafeToSpend(
     if (transaction.status !== "pending" || transaction.date < today || transaction.date > horizonDate) return sum;
     if (transaction.type === "expense" && transaction.paymentAccountType === "asset") return sum + transaction.amount;
     if (transaction.type === "debt-payment") return sum + transaction.amount;
+    if (transaction.type === "meal-plan-funding" && transaction.paymentAccountType === "asset") return sum + transaction.amount;
     return sum;
   }, 0);
 

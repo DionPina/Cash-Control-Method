@@ -5,6 +5,7 @@ import {
   calculateAssetBalance,
   calculateFinancialPosition,
   calculateLiabilityBalance,
+  calculateMealPlanBalance,
 } from "../lib/accounting/engine.ts";
 import {
   generateMonthlyReport,
@@ -12,6 +13,7 @@ import {
 } from "../lib/accounting/reports.ts";
 import {
   budgetVariances,
+  budgetAmountForMonth,
   calculatePlanProgress,
   calculateSafeToSpend,
   planForMonth,
@@ -267,6 +269,29 @@ test("monthly plans keep category budgets connected to one total", () => {
   assert.equal(plan.expectedIncome, 1_500);
 });
 
+test("weekly plan amounts retain their cadence and normalize for a monthly view", () => {
+  assert.equal(budgetAmountForMonth(75, "weekly"), 325);
+  assert.equal(budgetAmountForMonth(40, "daily").toFixed(2), "1216.67");
+  assert.equal(budgetAmountForMonth(500, "semester"), 100);
+});
+
+test("meal-plan funding moves cash into restricted value and usage records food expense", () => {
+  const mealPlan = { id: "meal", name: "Dining Dollars", type: "declining-balance", openingBalance: 100, openingBalanceDate: "2026-01-01" };
+  const mealTransactions = [
+    { id: "fund", type: "meal-plan-funding", date: "2026-01-10", description: "Dining dollars reload", amount: 50, paymentAccountType: "asset", paymentAccountId: "checking", mealPlanAccountId: "meal", status: "posted", createdAt: "2026-01-10T12:00:00.000Z" },
+    { id: "use", type: "meal-plan-use", date: "2026-01-11", description: "Campus cafe", amount: 20, mealPlanAccountId: "meal", category: "dining-out", status: "posted", createdAt: "2026-01-11T12:00:00.000Z" },
+  ];
+  const mealData = { version: 1, assetAccounts: [checking], liabilityAccounts: [], mealPlanAccounts: [mealPlan], transactions: mealTransactions };
+  const position = calculateFinancialPosition(mealData, { date: "2026-01-31", includeDate: true });
+  const report = generateMonthlyReport(mealData, "2026-01-15");
+
+  assert.equal(position.totalCash, 950);
+  assert.equal(calculateMealPlanBalance(mealPlan, mealTransactions, { date: "2026-01-31", includeDate: true }), 130);
+  assert.equal(position.totalRestricted, 130);
+  assert.equal(report.mealPlanFundingCash, 50);
+  assert.equal(report.totalExpensesIncurred, 20);
+});
+
 test("budget variance compares posted expenses with the matching category plan", () => {
   const plan = {
     month: "2026-01",
@@ -428,9 +453,18 @@ test("onboarding creates one connected opening position and monthly plan", () =>
     incomeSource: "Campus job",
     nextIncomeDate: "2026-01-23",
     expectedIncome: "900",
+    housingSituation: "dorm",
     rent: "500",
     rentDueDay: "1",
+    utilitiesIncluded: "yes",
+    utilities: "",
+    mealPlanType: "declining-balance",
+    mealPlanName: "Campus Dining",
+    mealPlanBalance: "150",
+    mealPlanSemesterCost: "600",
+    mealPlanSwipes: "",
     groceries: "200",
+    diningOut: "25",
     transportation: "80",
     otherSpending: "50",
     safetyBuffer: "100",
@@ -446,10 +480,13 @@ test("onboarding creates one connected opening position and monthly plan", () =>
   assert.deepEqual(onboarding.monthlyPlans[0].categoryBudgets, {
     "rent-housing": 500,
     groceries: 200,
+    "dining-out": 25,
     "gas-transportation": 80,
     "other-expense": 50,
   });
   assert.equal(onboarding.monthlyPlans[0].plannedDebtPayment, 35);
+  assert.equal(onboarding.mealPlanAccounts[0].openingBalance, 150);
+  assert.equal(onboarding.monthlyPlans[0].categoryBudgetCadences.groceries, "weekly");
 });
 
 test("transaction validation rejects a transfer to the same account", () => {
@@ -462,6 +499,23 @@ test("transaction validation rejects a transfer to the same account", () => {
 
   const errors = validateTransaction(invalidTransfer, data);
   assert.ok(errors.some((error) => error.includes("must be different")));
+});
+
+test("transaction validation prevents overspending a restricted meal-plan balance", () => {
+  const mealPlan = { id: "meal", name: "Dining Dollars", type: "declining-balance", openingBalance: 40, openingBalanceDate: "2026-01-01" };
+  const errors = validateTransaction({
+    id: "meal-use",
+    type: "meal-plan-use",
+    date: "2026-01-10",
+    description: "Campus cafe",
+    amount: 50,
+    mealPlanAccountId: "meal",
+    category: "dining-out",
+    status: "posted",
+    createdAt: "2026-01-10T12:00:00.000Z",
+  }, { ...data, mealPlanAccounts: [mealPlan] });
+
+  assert.ok(errors.some((error) => error.includes("restricted balance")));
 });
 
 test("transaction validation rejects principal greater than the posted balance", () => {

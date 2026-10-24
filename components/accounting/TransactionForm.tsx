@@ -63,6 +63,9 @@ export default function TransactionForm({
   );
   const [liabilityAccountId, setLiabilityAccountId] = useState(initialLiabilityId(editingTransaction));
   const [paymentAccount, setPaymentAccount] = useState(initialPaymentAccount(editingTransaction));
+  const [mealPlanAccountId, setMealPlanAccountId] = useState(
+    editingTransaction?.type === "meal-plan-funding" || editingTransaction?.type === "meal-plan-use" ? editingTransaction.mealPlanAccountId : "",
+  );
   const [incomeCategory, setIncomeCategory] = useState<IncomeCategory>(
     editingTransaction?.type === "income" ? editingTransaction.category : "wages-salary",
   );
@@ -80,6 +83,7 @@ export default function TransactionForm({
 
   const hasAssets = data.assetAccounts.length > 0;
   const hasLiabilities = data.liabilityAccounts.length > 0;
+  const hasMealPlans = (data.mealPlanAccounts ?? []).length > 0;
 
   const chooseType = (nextType: TransactionType) => {
     setType(nextType);
@@ -141,6 +145,13 @@ export default function TransactionForm({
         interestAmount: interest,
       };
     }
+    if (type === "meal-plan-funding") {
+      const [paymentAccountType, paymentAccountId = ""] = paymentAccount.split(":");
+      return { ...common, type, amount: parsePositiveAmount(amount) ?? Number.NaN, paymentAccountType: paymentAccountType === "liability" ? "liability" : "asset", paymentAccountId, mealPlanAccountId };
+    }
+    if (type === "meal-plan-use") {
+      return { ...common, type, amount: parsePositiveAmount(amount) ?? Number.NaN, mealPlanAccountId, category: expenseCategory === "groceries" ? "groceries" : "dining-out" };
+    }
     return {
       ...common,
       type: "transfer",
@@ -189,7 +200,7 @@ export default function TransactionForm({
         description="Enter a positive amount. The transaction type determines which accounts increase or decrease."
       />
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" role="group" aria-label="Transaction type">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="group" aria-label="Transaction type">
         {RECORD_CHOICES.map((choice) => (
           <button
             key={choice.value}
@@ -259,11 +270,25 @@ export default function TransactionForm({
             </>
           )}
 
+          {type === "meal-plan-funding" && (
+            <>
+              <Field label="Account used"><SelectInput value={paymentAccount} onChange={(event) => setPaymentAccount(event.target.value)}><option value="">Select an account</option><optgroup label="Cash accounts">{data.assetAccounts.map((account) => <option key={account.id} value={`asset:${account.id}`}>{account.name}</option>)}</optgroup><optgroup label="Credit or student account">{data.liabilityAccounts.map((account) => <option key={account.id} value={`liability:${account.id}`}>{account.name}</option>)}</optgroup></SelectInput></Field>
+              <MealPlanSelect value={mealPlanAccountId} onChange={setMealPlanAccountId} data={data} />
+            </>
+          )}
+
+          {type === "meal-plan-use" && (
+            <>
+              <MealPlanSelect value={mealPlanAccountId} onChange={setMealPlanAccountId} data={data} />
+              <Field label="Food category"><SelectInput value={expenseCategory === "groceries" ? "groceries" : "dining-out"} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory)}><option value="groceries">Groceries</option><option value="dining-out">Dining out</option></SelectInput></Field>
+            </>
+          )}
+
           <Field label="Status" helper="Only posted transactions affect balances and reports."><SelectInput value={status} onChange={(event) => setStatus(event.target.value as TransactionStatus)}><option value="posted">Posted</option><option value="pending">Pending</option></SelectInput></Field>
           <Field label="Note (optional)"><TextArea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add context for your records" /></Field>
         </div>
 
-        <EducationNote type={type} hasLiabilities={hasLiabilities} />
+        <EducationNote type={type} hasLiabilities={hasLiabilities} hasMealPlans={hasMealPlans} />
 
         {errors.length > 0 && (
           <div role="alert" className="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -296,7 +321,7 @@ function initialLiabilityId(transaction?: Transaction | null): string {
 }
 
 function initialPaymentAccount(transaction?: Transaction | null): string {
-  return transaction?.type === "expense" ? `${transaction.paymentAccountType}:${transaction.paymentAccountId}` : "";
+  return transaction?.type === "expense" || transaction?.type === "meal-plan-funding" ? `${transaction.paymentAccountType}:${transaction.paymentAccountId}` : "";
 }
 
 function AssetSelect({ label, value, onChange, data }: { label: string; value: string; onChange: (value: string) => void; data: AccountingData }) {
@@ -307,13 +332,19 @@ function LiabilitySelect({ label, value, onChange, data }: { label: string; valu
   return <Field label={label}><SelectInput value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select a liability</option>{data.liabilityAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectInput></Field>;
 }
 
-function EducationNote({ type, hasLiabilities }: { type: TransactionType; hasLiabilities: boolean }) {
+function MealPlanSelect({ value, onChange, data }: { value: string; onChange: (value: string) => void; data: AccountingData }) {
+  return <Field label="Meal plan"><SelectInput value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select a meal plan</option>{(data.mealPlanAccounts ?? []).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectInput></Field>;
+}
+
+function EducationNote({ type, hasLiabilities, hasMealPlans }: { type: TransactionType; hasLiabilities: boolean; hasMealPlans: boolean }) {
   const messages: Record<TransactionType, string> = {
     income: "Income and non-borrowed funding increases cash. Borrowed money belongs under borrowing instead.",
     expense: "A credit-card purchase records the expense now and increases what you owe. It does not reduce cash until you pay the card.",
     borrowing: hasLiabilities ? "Borrowed money increases your cash, but it also increases what you owe." : "Create a liability account before recording borrowed money.",
     "debt-payment": "A credit-card payment reduces cash and debt. The original purchase is the expense; only interest is a new expense here.",
     transfer: "Moving money between your accounts is a transfer, not income or an expense.",
+    "meal-plan-funding": hasMealPlans ? "Funding a meal plan lowers spendable cash or increases a student-account balance, but it creates restricted food value rather than an immediate food expense." : "Create a meal plan under Accounts & setup before funding it.",
+    "meal-plan-use": hasMealPlans ? "Using dining dollars records food spending and reduces restricted meal-plan value without lowering cash again." : "Create a meal plan under Accounts & setup before recording meal-plan use.",
   };
   return <p className="mt-5 rounded-2xl bg-sky-50 px-4 py-3 text-sm leading-relaxed text-slate-700">{messages[type]}</p>;
 }

@@ -8,6 +8,7 @@ import type {
   AccountingData,
   AssetAccount,
   LiabilityAccount,
+  MealPlanAccount,
   MonthlyPlan,
   Obligation,
   SavingsGoal,
@@ -19,6 +20,7 @@ const EMPTY_DATA: AccountingData = {
   version: 1,
   assetAccounts: [],
   liabilityAccounts: [],
+  mealPlanAccounts: [],
   transactions: [],
   profile: { onboardingComplete: false, priorities: [] },
   obligations: [],
@@ -100,6 +102,15 @@ export function useAccountingStore() {
     }));
   }, []);
 
+  const upsertMealPlanAccount = useCallback((account: MealPlanAccount) => {
+    setData((current) => ({
+      ...current,
+      mealPlanAccounts: (current.mealPlanAccounts ?? []).some((item) => item.id === account.id)
+        ? (current.mealPlanAccounts ?? []).map((item) => item.id === account.id ? account : item)
+        : [...(current.mealPlanAccounts ?? []), account],
+    }));
+  }, []);
+
   const deleteAssetAccount = useCallback((id: string) => {
     setData((current) => ({
       ...current,
@@ -119,6 +130,10 @@ export function useAccountingStore() {
       ...current,
       transactions: current.transactions.filter((transaction) => transaction.id !== id),
     }));
+  }, []);
+
+  const deleteMealPlanAccount = useCallback((id: string) => {
+    setData((current) => ({ ...current, mealPlanAccounts: (current.mealPlanAccounts ?? []).filter((item) => item.id !== id) }));
   }, []);
 
   const replaceAllData = useCallback((nextData: AccountingData) => {
@@ -193,9 +208,11 @@ export function useAccountingStore() {
     upsertAssetAccount,
     upsertLiabilityAccount,
     upsertTransaction,
+    upsertMealPlanAccount,
     deleteAssetAccount,
     deleteLiabilityAccount,
     deleteTransaction,
+    deleteMealPlanAccount,
     replaceAllData,
     clearAllData,
     saveProfile,

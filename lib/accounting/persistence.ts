@@ -45,6 +45,7 @@ export function migrateAndValidate(value: unknown): DataParseResult {
   const assetAccounts = arrayOrError(value.assetAccounts, "cash accounts", errors);
   const liabilityAccounts = arrayOrError(value.liabilityAccounts, "liability accounts", errors);
   const transactions = arrayOrError(value.transactions, "transactions", errors);
+  const mealPlanAccounts = optionalArray(value.mealPlanAccounts, "meal plans", errors);
   const obligations = optionalArray(value.obligations, "required payments", errors);
   const monthlyPlans = optionalArray(value.monthlyPlans, "monthly plans", errors);
   const goals = optionalArray(value.goals, "goals", errors);
@@ -65,8 +66,15 @@ export function migrateAndValidate(value: unknown): DataParseResult {
 
   const assetIds = new Set(assetAccounts.filter(isRecord).map((item) => item.id));
   const liabilityIds = new Set(liabilityAccounts.filter(isRecord).map((item) => item.id));
+  mealPlanAccounts.forEach((item, index) => {
+    if (!isRecord(item) || !isText(item.id) || !isText(item.name) ||
+      !["declining-balance", "swipes", "unlimited"].includes(String(item.type)) ||
+      !isNonNegative(item.openingBalance) || !isDate(item.openingBalanceDate) ||
+      !isOptionalNonNegative(item.semesterCost) || !isOptionalNonNegative(item.swipesRemaining)) errors.push(`Meal plan ${index + 1} is invalid.`);
+  });
+  const mealPlanIds = new Set(mealPlanAccounts.filter(isRecord).map((item) => item.id));
   transactions.forEach((item, index) => {
-    if (!isTransaction(item, assetIds, liabilityIds)) errors.push(`Transaction ${index + 1} is invalid.`);
+    if (!isTransaction(item, assetIds, liabilityIds, mealPlanIds)) errors.push(`Transaction ${index + 1} is invalid.`);
   });
   obligations.forEach((item, index) => {
     if (!isRecord(item) || !isText(item.id) || !isText(item.name) || !isPositive(item.amount) ||
@@ -79,6 +87,7 @@ export function migrateAndValidate(value: unknown): DataParseResult {
       !isNonNegative(item.expectedIncome) || !isRecord(item.categoryBudgets) ||
       !Object.entries(item.categoryBudgets).every(([category, amount]) =>
         hasValue(EXPENSE_CATEGORIES, category) && isNonNegative(amount)) ||
+      !(item.categoryBudgetCadences === undefined || (isRecord(item.categoryBudgetCadences) && Object.entries(item.categoryBudgetCadences).every(([category, cadence]) => hasValue(EXPENSE_CATEGORIES, category) && ["daily", "weekly", "monthly", "semester", "one-time"].includes(String(cadence))))) ||
       !isNonNegative(item.plannedDebtPayment) || !isNonNegative(item.plannedSavings) ||
       !isNonNegative(item.safetyBuffer)) errors.push(`Monthly plan ${index + 1} is invalid.`);
   });
@@ -102,11 +111,12 @@ export function migrateAndValidate(value: unknown): DataParseResult {
       obligations: data.obligations ?? [],
       monthlyPlans: data.monthlyPlans ?? [],
       goals: data.goals ?? [],
+      mealPlanAccounts: data.mealPlanAccounts ?? [],
     },
   };
 }
 
-function isTransaction(value: unknown, assetIds: Set<unknown>, liabilityIds: Set<unknown>): value is Transaction {
+function isTransaction(value: unknown, assetIds: Set<unknown>, liabilityIds: Set<unknown>, mealPlanIds: Set<unknown>): value is Transaction {
   if (!isRecord(value) || !isText(value.id) || !isDate(value.date) || !isText(value.description) ||
     !isPositive(value.amount) || !["posted", "pending"].includes(String(value.status)) ||
     !isText(value.createdAt) || !(value.note === undefined || typeof value.note === "string")) return false;
@@ -123,6 +133,9 @@ function isTransaction(value: unknown, assetIds: Set<unknown>, liabilityIds: Set
     Math.abs(Number(value.amount) - Number(value.principalAmount) - Number(value.interestAmount)) <= 0.005;
   if (value.type === "transfer") return assetIds.has(value.sourceAssetAccountId) &&
     assetIds.has(value.destinationAssetAccountId) && value.sourceAssetAccountId !== value.destinationAssetAccountId;
+  if (value.type === "meal-plan-funding") return mealPlanIds.has(value.mealPlanAccountId) &&
+    (value.paymentAccountType === "asset" ? assetIds.has(value.paymentAccountId) : value.paymentAccountType === "liability" && liabilityIds.has(value.paymentAccountId));
+  if (value.type === "meal-plan-use") return mealPlanIds.has(value.mealPlanAccountId) && ["groceries", "dining-out"].includes(String(value.category));
   return false;
 }
 
@@ -133,7 +146,8 @@ function isProfile(value: unknown): value is StudentProfile {
     (value.firstName === undefined || typeof value.firstName === "string") &&
     (value.expectedIncomeSource === undefined || typeof value.expectedIncomeSource === "string") &&
     (value.nextIncomeDate === undefined || isDate(value.nextIncomeDate)) &&
-    (value.nextIncomeAmount === undefined || isNonNegative(value.nextIncomeAmount));
+    (value.nextIncomeAmount === undefined || isNonNegative(value.nextIncomeAmount)) &&
+    (value.housingSituation === undefined || ["dorm", "off-campus", "with-family", "other"].includes(String(value.housingSituation)));
 }
 
 function arrayOrError(value: unknown, label: string, errors: string[]): unknown[] {
