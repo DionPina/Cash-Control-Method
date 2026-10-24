@@ -22,6 +22,7 @@ import {
   migrateAndValidate,
   parseAccountingBackup,
 } from "../lib/accounting/persistence.ts";
+import { buildOnboardingData } from "../lib/accounting/onboarding.ts";
 import {
   validateAssetAccount,
   validateTransaction,
@@ -415,6 +416,40 @@ test("stored data validation rejects malformed nested records", () => {
 
   assert.equal(parsed.ok, false);
   assert.match(parsed.error, /Transaction 1 is invalid/);
+});
+
+test("onboarding creates one connected opening position and monthly plan", () => {
+  const onboarding = buildOnboardingData({
+    firstName: "Sam",
+    priorities: ["make-money-last", "build-savings"],
+    checkingName: "Student Checking",
+    checkingBalance: "800",
+    savingsBalance: "250",
+    incomeSource: "Campus job",
+    nextIncomeDate: "2026-01-23",
+    expectedIncome: "900",
+    rent: "500",
+    rentDueDay: "1",
+    groceries: "200",
+    transportation: "80",
+    otherSpending: "50",
+    safetyBuffer: "100",
+    debtName: "Student Card",
+    debtBalance: "300",
+    minimumPayment: "35",
+  }, "2026-01-15");
+
+  assert.equal(onboarding.profile.onboardingComplete, true);
+  assert.equal(onboarding.assetAccounts.length, 2);
+  assert.equal(onboarding.liabilityAccounts[0].openingBalance, 300);
+  assert.equal(onboarding.obligations[0].amount, 500);
+  assert.deepEqual(onboarding.monthlyPlans[0].categoryBudgets, {
+    "rent-housing": 500,
+    groceries: 200,
+    "gas-transportation": 80,
+    "other-expense": 50,
+  });
+  assert.equal(onboarding.monthlyPlans[0].plannedDebtPayment, 35);
 });
 
 test("transaction validation rejects a transfer to the same account", () => {
