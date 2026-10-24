@@ -25,10 +25,12 @@ export type OnboardingValues = {
   diningOut: string;
   transportation: string;
   otherSpending: string;
+  plannedSavings: string;
   safetyBuffer: string;
   debtName: string;
   debtBalance: string;
   minimumPayment: string;
+  debtDueDay: string;
 };
 
 export function buildOnboardingData(values: OnboardingValues, today: string): AccountingData {
@@ -83,6 +85,7 @@ export function buildOnboardingData(values: OnboardingValues, today: string): Ac
       openingBalance: debtBalance,
       openingBalanceDate: today,
       minimumPayment: minimumPayment || undefined,
+      dueDay: minimumPayment > 0 ? Math.min(31, Math.max(1, Number(values.debtDueDay) || 1)) : undefined,
     }] : [],
     mealPlanAccounts: values.mealPlanType !== "none" ? [{
       id: createId("meal-plan"),
@@ -114,7 +117,7 @@ export function buildOnboardingData(values: OnboardingValues, today: string): Ac
         ...(amount(values.otherSpending) > 0 ? { "other-expense": "weekly" as const } : {}),
       },
       plannedDebtPayment: minimumPayment,
-      plannedSavings: 0,
+      plannedSavings: amount(values.plannedSavings),
       safetyBuffer: amount(values.safetyBuffer),
     }],
     goals: [],

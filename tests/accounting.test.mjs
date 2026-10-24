@@ -421,7 +421,64 @@ test("safe-to-spend stops at next income and protects known bills", () => {
 
   assert.equal(snapshot.horizonDate, "2026-01-20");
   assert.equal(snapshot.upcomingRequiredPayments, 60);
-  assert.equal(snapshot.safeToSpend, 3_130);
+  assert.equal(snapshot.pendingCashOutflows, 999);
+  assert.equal(snapshot.safeToSpend, 2_131);
+  assert.equal(snapshot.isCalculated, true);
+});
+
+test("safe-to-spend is not presented as calculated before needs are planned", () => {
+  const snapshot = calculateSafeToSpend({
+    ...data,
+    transactions: [],
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 1_000,
+      categoryBudgets: {},
+      plannedDebtPayment: 0,
+      plannedSavings: 0,
+      safetyBuffer: 0,
+    }],
+  }, "2026-01-15");
+
+  assert.equal(snapshot.cashNow, 1_500);
+  assert.equal(snapshot.isCalculated, false);
+});
+
+test("safe-to-spend protects the share of planned needs before next income", () => {
+  const snapshot = calculateSafeToSpend({
+    ...data,
+    transactions: [],
+    profile: { onboardingComplete: true, priorities: [], nextIncomeDate: "2026-01-20" },
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 0,
+      categoryBudgets: { groceries: 310 },
+      plannedDebtPayment: 0,
+      plannedSavings: 0,
+      safetyBuffer: 0,
+    }],
+  }, "2026-01-15");
+
+  assert.equal(snapshot.isCalculated, true);
+  assert.equal(snapshot.plannedNeedsRemaining.toFixed(2), "109.41");
+  assert.equal(snapshot.safeToSpend.toFixed(2), "1390.59");
+});
+
+test("pending credit purchases do not reduce pending cash outflows", () => {
+  const snapshot = calculateSafeToSpend({
+    ...data,
+    transactions: [{ ...transactions.find((item) => item.id === "pending"), paymentAccountType: "liability", paymentAccountId: "card" }],
+    monthlyPlans: [{
+      month: "2026-01",
+      expectedIncome: 0,
+      categoryBudgets: { groceries: 100 },
+      plannedDebtPayment: 0,
+      plannedSavings: 0,
+      safetyBuffer: 0,
+    }],
+  }, "2026-01-15");
+
+  assert.equal(snapshot.pendingCashOutflows, 0);
 });
 
 test("backup round-trip validates nested accounting records", () => {
@@ -467,10 +524,12 @@ test("onboarding creates one connected opening position and monthly plan", () =>
     diningOut: "25",
     transportation: "80",
     otherSpending: "50",
+    plannedSavings: "75",
     safetyBuffer: "100",
     debtName: "Student Card",
     debtBalance: "300",
     minimumPayment: "35",
+    debtDueDay: "18",
   }, "2026-01-15");
 
   assert.equal(onboarding.profile.onboardingComplete, true);
@@ -485,6 +544,8 @@ test("onboarding creates one connected opening position and monthly plan", () =>
     "other-expense": 50,
   });
   assert.equal(onboarding.monthlyPlans[0].plannedDebtPayment, 35);
+  assert.equal(onboarding.monthlyPlans[0].plannedSavings, 75);
+  assert.equal(onboarding.liabilityAccounts[0].dueDay, 18);
   assert.equal(onboarding.mealPlanAccounts[0].openingBalance, 150);
   assert.equal(onboarding.monthlyPlans[0].categoryBudgetCadences.groceries, "weekly");
 });

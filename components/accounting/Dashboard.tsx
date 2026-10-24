@@ -29,7 +29,7 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
   const pending = data.transactions.filter((transaction) => transaction.status === "pending");
   const uncategorized = data.transactions.filter((transaction) => transaction.status === "posted" && transaction.type === "expense" && transaction.category === "uncategorized");
   const recent = sortTransactionsNewestFirst(data.transactions).slice(0, 4);
-  const hasPlan = plan.expectedIncome > 0 || Object.values(plan.categoryBudgets).some((value) => (value ?? 0) > 0);
+  const hasPlan = safe.isCalculated;
   const name = data.profile?.firstName ? `, ${data.profile.firstName}` : "";
   const topWeekly = weekly.expenseBreakdown.slice(0, 4);
   const groceriesThisWeek = weekly.expenseBreakdown.find((item) => item.category === "groceries")?.amount ?? 0;
@@ -46,19 +46,50 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
       <section className="overflow-hidden rounded-[2rem] bg-[#020b24] p-6 text-white shadow-sm sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Safe to spend through {formatDate(safe.horizonDate)}</p>
-            <p className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{formatCurrency(safe.safeToSpend)}</p>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">This guardrail starts with cash today and protects bills you added, pending cash activity, unfinished savings, and your cash cushion. {safe.usesNextIncomeDate ? "It stops at your next expected income date." : "Add a future income date to use a before-payday horizon."}</p>
-            <button type="button" onClick={() => onNavigate("plan")} className="mt-4 text-sm font-semibold text-sky-300 underline decoration-sky-500 underline-offset-4">See how this was calculated</button>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">{safe.isCalculated ? `Safe to spend through ${formatDate(safe.horizonDate)}` : "Cash available today"}</p>
+            {safe.isCalculated ? (
+              <p className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{formatCurrency(safe.safeToSpend)}</p>
+            ) : (
+              <div className="mt-3"><p className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">{formatCurrency(safe.cashNow)}</p><p className="mt-2 text-lg font-semibold text-amber-300">Safe to spend: Not yet calculated</p></div>
+            )}
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{safe.isCalculated ? <>This guardrail starts with cash today and protects bills you added, pending cash activity, unfinished savings, and your cash cushion. {safe.usesNextIncomeDate ? "It stops at your next expected income date." : "Add a future income date to use a before-payday horizon."}</> : "Cash on hand is not automatically safe to spend. Add expected income, bills, everyday needs, savings, and a cushion before relying on this guardrail."}</p>
+            <button type="button" onClick={() => onNavigate("plan")} className="mt-4 text-sm font-semibold text-sky-300 underline decoration-sky-500 underline-offset-4">{safe.isCalculated ? "See how this was calculated" : "Build the plan to calculate it"}</button>
           </div>
           <dl className="grid grid-cols-2 gap-3">
             <DarkMetric label="Cash today" value={safe.cashNow} />
-            <DarkMetric label="Bills due first" value={safe.upcomingRequiredPayments} />
+            <DarkMetric label="Bills + planned needs" value={safe.upcomingRequiredPayments + safe.plannedNeedsRemaining} />
             <DarkMetric label="Pending cash out" value={safe.pendingCashOutflows} />
             <DarkMetric label="Savings + cushion" value={safe.savingsRemaining + safe.safetyBuffer} />
           </dl>
         </div>
       </section>
+
+      {!hasPlan && (
+        <SectionCard className="border-sky-200 bg-sky-50">
+          <SectionHeading eyebrow="Finish setup" title="Turn cash on hand into a useful spending guardrail" description="Your opening balances are saved. Complete the remaining foundations so Cash Control can calculate what is genuinely available." action={<PrimaryButton type="button" onClick={() => onNavigate("plan")}>Build my plan</PrimaryButton>} />
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <SetupItem label="Cash balances" complete={data.assetAccounts.length > 0} />
+            <SetupItem label="Expected income" complete={plan.expectedIncome > 0 || Boolean(data.profile?.nextIncomeAmount)} />
+            <SetupItem label="Bills and needs" complete={(data.obligations?.length ?? 0) > 0 || Object.values(plan.categoryBudgets).some((value) => (value ?? 0) > 0)} />
+            <SetupItem label="Savings or cushion" complete={plan.plannedSavings > 0 || plan.safetyBuffer > 0 || (data.goals?.length ?? 0) > 0} />
+          </div>
+        </SectionCard>
+      )}
+
+      <SectionCard>
+        <SectionHeading eyebrow="Accounting foundations" title="Your full financial position" description="Cash, funding, expenses, and debts stay connected to the same transaction ledger." action={<SecondaryButton type="button" onClick={() => onNavigate("accounts")}>Manage accounts</SecondaryButton>} />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <FoundationCard label="Cash & assets" value={position.totalCash + (position.totalRestricted ?? 0)} detail={`${formatCurrency(position.totalCash)} spendable cash${(position.totalRestricted ?? 0) > 0 ? ` + ${formatCurrency(position.totalRestricted ?? 0)} restricted` : ""}`} />
+          <FoundationCard label="Income & funding" value={monthly.incomeFunding + monthly.borrowedFunds} detail={`${formatCurrency(monthly.incomeFunding)} income · ${formatCurrency(monthly.borrowedFunds)} borrowed`} />
+          <FoundationCard label="Expenses" value={monthly.totalExpensesIncurred} detail="Incurred this month, regardless of payment method" />
+          <FoundationCard label="Liabilities" value={position.totalLiabilities} detail={`${position.liabilityBalances.length} account${position.liabilityBalances.length === 1 ? "" : "s"} owed`} />
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <PositionList title="What you own" empty="No asset accounts added" items={[...position.assetBalances, ...(position.restrictedBalances ?? [])]} />
+          <PositionList title="What you owe" empty="No liabilities recorded" items={position.liabilityBalances} />
+        </div>
+        <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#020b24] px-4 py-3 text-white"><span className="text-sm text-slate-300">Net financial position</span><strong>{formatCurrency(position.netFinancialPosition)}</strong></div>
+      </SectionCard>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <LightMetric label="Spent today" value={daily.totalExpensesIncurred} />
@@ -111,6 +142,9 @@ export default function Dashboard({ data, onNavigate }: DashboardProps) {
 
 function DarkMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl bg-white/10 p-3"><dt className="text-xs text-slate-300">{label}</dt><dd className="mt-1 font-semibold text-white">{formatCurrency(value)}</dd></div>; }
 function LightMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-lg font-semibold text-[#020b24]">{formatCurrency(value)}</p></div>; }
+function FoundationCard({ label, value, detail }: { label: string; value: number; detail: string }) { return <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-sky-700">{label}</p><p className="mt-2 text-2xl font-semibold text-[#020b24]">{formatCurrency(value)}</p><p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p></div>; }
+function PositionList({ title, empty, items }: { title: string; empty: string; items: Array<{ id: string; name: string; balance: number }> }) { return <div className="rounded-2xl bg-white p-4"><h3 className="text-sm font-semibold text-[#020b24]">{title}</h3>{items.length === 0 ? <p className="mt-3 text-sm text-slate-500">{empty}</p> : <dl className="mt-3 space-y-2">{items.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 text-sm"><dt className="text-slate-600">{item.name}</dt><dd className="font-semibold text-[#020b24]">{formatCurrency(item.balance)}</dd></div>)}</dl>}</div>; }
+function SetupItem({ label, complete }: { label: string; complete: boolean }) { return <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm"><span aria-hidden="true" className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${complete ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{complete ? "✓" : "·"}</span><span className="font-medium text-[#020b24]">{label}</span></div>; }
 function WeeklyPace({ label, actual, planned }: { label: string; actual: number; planned: number }) { const remaining = planned - actual; const width = planned > 0 ? Math.min(100, (actual / planned) * 100) : 0; return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-[#020b24]">{label}</p><p className="mt-1 text-xs text-slate-500">{planned > 0 ? remaining >= 0 ? `${formatCurrency(remaining)} left from ${formatCurrency(planned)}` : `${formatCurrency(Math.abs(remaining))} over the weekly plan` : "Add a weekly amount in Plan"}</p></div><p className="font-semibold text-[#020b24]">{formatCurrency(actual)}</p></div>{planned > 0 && <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${remaining < 0 ? "bg-amber-500" : "bg-sky-600"}`} style={{ width: `${width}%` }} /></div>}</div>; }
 function AttentionRow({ label, value, action }: { label: string; value: number; action: () => void }) { return <button type="button" onClick={action} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-sky-300"><span className="text-slate-600">{label}</span><span className={`font-semibold ${value > 0 ? "text-amber-800" : "text-[#020b24]"}`}>{value}</span></button>; }
 

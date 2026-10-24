@@ -137,12 +137,14 @@ export default function PlanPanel({
 
       <SectionCard className="bg-[#020b24] text-white">
         <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-sky-300">Near-term guardrail</p>
-        <h3 className="mt-1 text-xl font-semibold text-white md:text-2xl">Safe to spend through {formatDate(safe.horizonDate)}</h3>
-        <p className="mt-1 text-sm text-slate-300">{safe.usesNextIncomeDate ? "This stops before your next expected income arrives." : "No future income date is saved, so this uses the end of the month."}</p>
-        <p className={`mt-5 text-4xl font-semibold ${safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{formatCurrency(safe.safeToSpend)}</p>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <h3 className="mt-1 text-xl font-semibold text-white md:text-2xl">{safe.isCalculated ? `Safe to spend through ${formatDate(safe.horizonDate)}` : "Safe to spend: Not yet calculated"}</h3>
+        <p className="mt-1 text-sm text-slate-300">{safe.isCalculated ? (safe.usesNextIncomeDate ? "This stops before your next expected income arrives." : "No future income date is saved, so this uses the end of the month.") : "Add at least one real planning amount below. Cash available is shown separately until your needs and commitments are established."}</p>
+        <p className={`mt-5 text-4xl font-semibold ${safe.isCalculated && safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{safe.isCalculated ? formatCurrency(safe.safeToSpend) : formatCurrency(safe.cashNow)}</p>
+        {!safe.isCalculated && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Cash available</p>}
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <GuardrailItem label="Cash now" value={safe.cashNow} />
           <GuardrailItem label="Bills due first" value={safe.upcomingRequiredPayments} subtract />
+          <GuardrailItem label="Other planned needs" value={safe.plannedNeedsRemaining} subtract />
           <GuardrailItem label="Pending cash out" value={safe.pendingCashOutflows} subtract />
           <GuardrailItem label="Savings left" value={safe.savingsRemaining} subtract />
           <GuardrailItem label="Cash cushion" value={safe.safetyBuffer} subtract />

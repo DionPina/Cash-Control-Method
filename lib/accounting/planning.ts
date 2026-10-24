@@ -16,6 +16,25 @@ export function planForMonth(data: AccountingData, month: string): MonthlyPlan {
   return data.monthlyPlans?.find((plan) => plan.month === month) ?? EMPTY_MONTHLY_PLAN(month);
 }
 
+/** True only when the student has supplied enough planning information for a guardrail. */
+export function hasMeaningfulPlan(plan: MonthlyPlan): boolean {
+  return plan.expectedIncome > 0 ||
+    plan.plannedDebtPayment > 0 ||
+    plan.plannedSavings > 0 ||
+    plan.safetyBuffer > 0 ||
+    Object.values(plan.categoryBudgets).some((value) => (value ?? 0) > 0);
+}
+
+function hasGuardrailInputs(data: AccountingData, plan: MonthlyPlan): boolean {
+  return plan.plannedDebtPayment > 0 ||
+    plan.plannedSavings > 0 ||
+    plan.safetyBuffer > 0 ||
+    Object.values(plan.categoryBudgets).some((value) => (value ?? 0) > 0) ||
+    (data.obligations?.some((item) => item.amount > 0) ?? false) ||
+    data.liabilityAccounts.some((item) => (item.minimumPayment ?? 0) > 0) ||
+    (data.goals?.some((item) => item.monthlyContribution > 0) ?? false);
+}
+
 export function totalCategoryBudget(plan: MonthlyPlan): number {
   return (Object.entries(plan.categoryBudgets) as Array<[ExpenseCategory, number | undefined]>).reduce(
     (sum, [category, value]) => sum + budgetAmountForMonth(value ?? 0, plan.categoryBudgetCadences?.[category]),
@@ -134,10 +153,12 @@ export function calculatePlanProgress(
 }
 
 export type SafeToSpendSnapshot = {
+  isCalculated: boolean;
   cashNow: number;
   horizonDate: string;
   usesNextIncomeDate: boolean;
   upcomingRequiredPayments: number;
+  plannedNeedsRemaining: number;
   pendingCashOutflows: number;
   savingsRemaining: number;
   safetyBuffer: number;
@@ -156,8 +177,11 @@ export function calculateSafeToSpend(
   const usesNextIncomeDate = Boolean(nextIncomeDate && nextIncomeDate > today);
   const horizonDate = usesNextIncomeDate ? nextIncomeDate! : endOfMonth(today);
   const upcomingRequiredPayments = obligationsDueThrough(data, today, horizonDate);
+  const plannedNeedsRemaining = supplementalPlannedNeedsDueThrough(data, plan, progress, today, horizonDate);
   const pendingCashOutflows = data.transactions.reduce((sum, transaction) => {
-    if (transaction.status !== "pending" || transaction.date < today || transaction.date > horizonDate) return sum;
+    // An older item that is still pending can still settle against cash today.
+    // Future pending items count only when they fall inside this guardrail's horizon.
+    if (transaction.status !== "pending" || transaction.date > horizonDate) return sum;
     if (transaction.type === "expense" && transaction.paymentAccountType === "asset") return sum + transaction.amount;
     if (transaction.type === "debt-payment") return sum + transaction.amount;
     if (transaction.type === "meal-plan-funding" && transaction.paymentAccountType === "asset") return sum + transaction.amount;
@@ -165,16 +189,67 @@ export function calculateSafeToSpend(
   }, 0);
 
   return {
+    isCalculated: hasGuardrailInputs(data, plan),
     cashNow: progress.totalCash,
     horizonDate,
     usesNextIncomeDate,
     upcomingRequiredPayments,
+    plannedNeedsRemaining,
     pendingCashOutflows,
     savingsRemaining: progress.savingsRemaining,
     safetyBuffer: plan.safetyBuffer,
-    safeToSpend: progress.totalCash - upcomingRequiredPayments - pendingCashOutflows -
+    safeToSpend: progress.totalCash - upcomingRequiredPayments - plannedNeedsRemaining - pendingCashOutflows -
       progress.savingsRemaining - plan.safetyBuffer,
   };
+}
+
+function supplementalPlannedNeedsDueThrough(
+  data: AccountingData,
+  plan: MonthlyPlan,
+  progress: PlanProgress,
+  today: string,
+  horizonDate: string,
+): number {
+  const monthEnd = endOfMonth(today);
+  const clippedHorizon = horizonDate < monthEnd ? horizonDate : monthEnd;
+  const remainingDays = daysInclusive(today, monthEnd);
+  const horizonDays = daysInclusive(today, clippedHorizon);
+  const fraction = remainingDays > 0 ? Math.min(1, horizonDays / remainingDays) : 1;
+  const periodToDate = generatePeriodReport(data, startOfMonth(today), today);
+  const variances = budgetVariances(plan, periodToDate);
+  const requiredByCategory = new Map<ExpenseCategory, number>();
+
+  for (const obligation of data.obligations ?? []) {
+    const due = recurringAmountDue(obligation.amount, obligation.dueDay, today, horizonDate);
+    requiredByCategory.set(obligation.category, (requiredByCategory.get(obligation.category) ?? 0) + due);
+  }
+
+  const categories = new Set<ExpenseCategory>([
+    ...variances.map((item) => item.category),
+    ...requiredByCategory.keys(),
+  ]);
+  let protectedCategories = 0;
+  let requiredCategoryTotal = 0;
+  for (const category of categories) {
+    const planned = (variances.find((item) => item.category === category)?.remaining ?? 0) * fraction;
+    const required = requiredByCategory.get(category) ?? 0;
+    protectedCategories += Math.max(0, planned, required);
+    requiredCategoryTotal += required;
+  }
+
+  const requiredDebt = data.liabilityAccounts.reduce((sum, liability) => {
+    return sum + (liability.minimumPayment && liability.dueDay
+      ? recurringAmountDue(liability.minimumPayment, liability.dueDay, today, horizonDate)
+      : 0);
+  }, 0);
+  const protectedDebt = Math.max(requiredDebt, progress.debtPaymentRemaining * fraction);
+  return Math.max(0, protectedCategories + protectedDebt - requiredCategoryTotal - requiredDebt);
+}
+
+function daysInclusive(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T12:00:00Z`).getTime();
+  const end = new Date(`${endDate}T12:00:00Z`).getTime();
+  return end < start ? 0 : Math.floor((end - start) / 86_400_000) + 1;
 }
 
 export function planPeriod(month: string): { startDate: string; endDate: string } {

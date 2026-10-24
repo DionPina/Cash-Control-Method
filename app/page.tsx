@@ -47,13 +47,18 @@ export default function HomePage() {
       >
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-10">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
-            Built with care for real student decisions
+            Built on accounting. Designed for real life.
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
-            Cash Control Method was created by Dion Pina to apply accounting
-            and business concepts to everyday student finances. The interface
-            stays personal and approachable while sound accounting supports
-            every balance, plan, comparison, and report behind the scenes.
+            Cash Control was created by Dion Pina, an accounting student, to
+            bring accounting principles into everyday personal finance.
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
+            Going beyond traditional budgeting, Cash Control helps people
+            understand their cash, income, expenses, and liabilities in one
+            place. The goal is to make financial information easier to
+            understand and help people make informed decisions with greater
+            confidence.
           </p>
         </div>
       </section>

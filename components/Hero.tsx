@@ -3,14 +3,15 @@ export default function Hero() {
     <section id="hero" className="scroll-mt-24 bg-[#020b24] text-slate-50">
       <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20 lg:px-8 lg:py-24">
         <p className="inline-flex rounded-full border border-slate-700 bg-slate-900/50 px-4 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-slate-200">
-          Made for college life
+          Better money decisions
         </p>
         <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-          Understand your money. Make confident decisions.
+          Know where you stand.
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base md:text-lg md:leading-8">
-          See what comes in, where it goes, and what needs your attention
-          through quick daily check-ins, weekly pacing, and monthly reviews.
+          Understand what you have, what you owe, and how your money moves.
+          Plan for what&apos;s ahead, record everyday activity, and stay informed
+          about your financial position.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <a

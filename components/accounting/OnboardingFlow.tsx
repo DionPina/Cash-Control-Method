@@ -44,10 +44,12 @@ type SetupValues = {
   diningOut: string;
   transportation: string;
   otherSpending: string;
+  plannedSavings: string;
   safetyBuffer: string;
   debtName: string;
   debtBalance: string;
   minimumPayment: string;
+  debtDueDay: string;
 };
 
 const priorityOptions: Array<{
@@ -86,10 +88,12 @@ const initialValues: SetupValues = {
   diningOut: "",
   transportation: "",
   otherSpending: "",
+  plannedSavings: "",
   safetyBuffer: "",
   debtName: "",
   debtBalance: "",
   minimumPayment: "",
+  debtDueDay: "1",
 };
 
 export default function OnboardingFlow({
@@ -126,10 +130,19 @@ export default function OnboardingFlow({
       setError("Enter the amount currently available in your main account.");
       return;
     }
+    if (step === 3 && amount(values.expectedIncome) > 0 && (!values.incomeSource.trim() || !values.nextIncomeDate)) {
+      setError("Add both the source and expected date for the income amount.");
+      return;
+    }
     setStep((current) => Math.min(5, current + 1));
   };
 
   const finish = () => {
+    const protectionPlan = expensePlan + amount(values.minimumPayment) + amount(values.plannedSavings) + amount(values.safetyBuffer);
+    if (protectionPlan <= 0) {
+      setError("Add at least one bill, everyday spending amount, debt payment, savings amount, or cash cushion so safe-to-spend has something to protect.");
+      return;
+    }
     const today = todayIso();
     onComplete(buildOnboardingData(values, today));
   };
@@ -233,6 +246,7 @@ export default function OnboardingFlow({
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <Field label="Transportation per week"><TextInput inputMode="decimal" value={values.transportation} onChange={(event) => update("transportation", event.target.value)} placeholder="0.00" /></Field>
                 <Field label="Other flexible spending per week"><TextInput inputMode="decimal" value={values.otherSpending} onChange={(event) => update("otherSpending", event.target.value)} placeholder="0.00" /></Field>
+                <Field label="Savings per month" helper="An amount you want the plan to protect before spending."><TextInput inputMode="decimal" value={values.plannedSavings} onChange={(event) => update("plannedSavings", event.target.value)} placeholder="0.00" /></Field>
                 <Field label="Cash cushion" helper="Money you prefer to leave available."><TextInput inputMode="decimal" value={values.safetyBuffer} onChange={(event) => update("safetyBuffer", event.target.value)} placeholder="0.00" /></Field>
               </div>
             </SetupStep>
@@ -240,16 +254,18 @@ export default function OnboardingFlow({
 
           {step === 5 && (
             <SetupStep title="Review your starting picture" description="Add money you owe if it belongs in your starting picture, then confirm everything below.">
-              <div className="grid gap-5 sm:grid-cols-3">
+              <div className="grid gap-5 sm:grid-cols-2">
                 <Field label="Debt name (optional)"><TextInput value={values.debtName} onChange={(event) => update("debtName", event.target.value)} placeholder="Credit card or loan" /></Field>
                 <Field label="Amount owed"><TextInput inputMode="decimal" value={values.debtBalance} onChange={(event) => update("debtBalance", event.target.value)} placeholder="0.00" /></Field>
                 <Field label="Minimum payment"><TextInput inputMode="decimal" value={values.minimumPayment} onChange={(event) => update("minimumPayment", event.target.value)} placeholder="0.00" /></Field>
+                <Field label="Payment due day"><SelectInput value={values.debtDueDay} onChange={(event) => update("debtDueDay", event.target.value)}>{Array.from({ length: 31 }, (_, index) => <option key={index + 1} value={index + 1}>Day {index + 1}</option>)}</SelectInput></Field>
               </div>
               <dl className="mt-7 grid gap-3 sm:grid-cols-2">
                 <ReviewItem label="Cash available" value={formatCurrency(amount(values.checkingBalance) + amount(values.savingsBalance))} />
                 <ReviewItem label="Expected money" value={formatCurrency(amount(values.expectedIncome))} />
                 <ReviewItem label="Monthly plan equivalent" value={formatCurrency(expensePlan)} />
                 <ReviewItem label="Meal-plan value" value={formatCurrency(amount(values.mealPlanBalance))} />
+                <ReviewItem label="Savings protected monthly" value={formatCurrency(amount(values.plannedSavings))} />
                 <ReviewItem label="Cash cushion" value={formatCurrency(amount(values.safetyBuffer))} />
               </dl>
             </SetupStep>

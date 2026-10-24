@@ -33,7 +33,7 @@ export default function Navbar() {
               Cash Control
             </span>
             <span className="text-sm md:text-base font-medium text-[#020b24]">
-              Budgeting for college life
+              Financial clarity
             </span>
           </div>
         </div>
