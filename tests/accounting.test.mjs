@@ -14,6 +14,7 @@ import {
 import {
   budgetVariances,
   budgetAmountForMonth,
+  calculateProtectedCash,
   calculatePlanProgress,
   calculateSafeToSpend,
   planForMonth,
@@ -25,6 +26,7 @@ import {
   parseAccountingBackup,
 } from "../lib/accounting/persistence.ts";
 import { buildOnboardingData } from "../lib/accounting/onboarding.ts";
+import { createSampleData } from "../lib/accounting/sampleData.ts";
 import {
   validateAssetAccount,
   validateTransaction,
@@ -464,6 +466,33 @@ test("safe-to-spend protects the share of planned needs before next income", () 
   assert.equal(snapshot.safeToSpend.toFixed(2), "1390.59");
 });
 
+test("protected accounts and goal reserves are not subtracted twice", () => {
+  const protectedData = {
+    ...data,
+    assetAccounts: [checking, { ...savings, protectFromSpending: true }],
+    transactions: [],
+    goals: [{ id: "emergency", name: "Emergency fund", targetAmount: 2_000, currentAmount: 350, monthlyContribution: 0 }],
+  };
+  const protection = calculateProtectedCash(protectedData, "2026-01-15");
+
+  assert.equal(protection.accountProtectedBalance, 500);
+  assert.equal(protection.goalReservedBalance, 350);
+  assert.equal(protection.protectedCash, 500);
+});
+
+test("goal reserves still protect cash when they exceed protected-account balances", () => {
+  const protection = calculateProtectedCash({
+    ...data,
+    assetAccounts: [checking, { ...savings, protectFromSpending: true }],
+    transactions: [],
+    goals: [{ id: "laptop", name: "Laptop", targetAmount: 1_000, currentAmount: 700, monthlyContribution: 0 }],
+  }, "2026-01-15");
+
+  assert.equal(protection.accountProtectedBalance, 500);
+  assert.equal(protection.goalReservedBalance, 700);
+  assert.equal(protection.protectedCash, 700);
+});
+
 test("pending credit purchases do not reduce pending cash outflows", () => {
   const snapshot = calculateSafeToSpend({
     ...data,
@@ -487,6 +516,26 @@ test("backup round-trip validates nested accounting records", () => {
 
   assert.equal(parsed.ok, true);
   assert.equal(parsed.ok && parsed.data.transactions.length, transactions.length);
+});
+
+test("sample data stays labeled and protects emergency savings", () => {
+  const sample = createSampleData();
+  const emergency = sample.assetAccounts.find((account) => account.id === "sample-savings");
+
+  assert.equal(sample.profile.isSampleData, true);
+  assert.equal(emergency.protectFromSpending, true);
+  assert.equal(parseAccountingBackup(createAccountingBackup(sample)).ok, true);
+});
+
+test("legacy sample records gain the demo label and savings protection", () => {
+  const sample = createSampleData();
+  delete sample.profile.isSampleData;
+  delete sample.assetAccounts.find((account) => account.id === "sample-savings").protectFromSpending;
+  const migrated = migrateAndValidate(sample);
+
+  assert.equal(migrated.ok, true);
+  assert.equal(migrated.ok && migrated.data.profile.isSampleData, true);
+  assert.equal(migrated.ok && migrated.data.assetAccounts.find((account) => account.id === "sample-savings").protectFromSpending, true);
 });
 
 test("stored data validation rejects malformed nested records", () => {

@@ -53,7 +53,8 @@ export function migrateAndValidate(value: unknown): DataParseResult {
   assetAccounts.forEach((item, index) => {
     if (!isRecord(item) || !isText(item.id) || !isText(item.name) ||
       !hasValue(ASSET_ACCOUNT_TYPES, item.type) || !isNonNegative(item.openingBalance) ||
-      !isDate(item.openingBalanceDate)) errors.push(`Cash account ${index + 1} is invalid.`);
+      !isDate(item.openingBalanceDate) ||
+      !(item.protectFromSpending === undefined || typeof item.protectFromSpending === "boolean")) errors.push(`Cash account ${index + 1} is invalid.`);
   });
   liabilityAccounts.forEach((item, index) => {
     if (!isRecord(item) || !isText(item.id) || !isText(item.name) ||
@@ -100,14 +101,23 @@ export function migrateAndValidate(value: unknown): DataParseResult {
 
   if (errors.length) return { ok: false, error: errors.slice(0, 3).join(" ") };
   const data = value as unknown as AccountingData;
+  const legacySampleData = data.assetAccounts.some((account) => account.id === "sample-checking") &&
+    data.assetAccounts.some((account) => account.id === "sample-savings") &&
+    data.transactions.some((transaction) => transaction.id === "sample-income");
+  const profile = data.profile ?? {
+    onboardingComplete: data.assetAccounts.length > 0 || data.transactions.length > 0,
+    priorities: [],
+  };
   return {
     ok: true,
     data: {
       ...data,
-      profile: data.profile ?? {
-        onboardingComplete: data.assetAccounts.length > 0 || data.transactions.length > 0,
-        priorities: [],
-      },
+      assetAccounts: data.assetAccounts.map((account) => account.id === "sample-savings" && legacySampleData && account.protectFromSpending === undefined
+        ? { ...account, protectFromSpending: true }
+        : account),
+      profile: profile.isSampleData === undefined && legacySampleData
+        ? { ...profile, isSampleData: true }
+        : profile,
       obligations: data.obligations ?? [],
       monthlyPlans: data.monthlyPlans ?? [],
       goals: data.goals ?? [],
@@ -143,6 +153,7 @@ function isProfile(value: unknown): value is StudentProfile {
   if (!isRecord(value) || typeof value.onboardingComplete !== "boolean" || !Array.isArray(value.priorities)) return false;
   const priorities = new Set(["make-money-last", "stay-ahead-of-bills", "understand-spending", "control-spending", "build-savings", "reduce-debt"]);
   return value.priorities.every((item) => priorities.has(String(item))) &&
+    (value.isSampleData === undefined || typeof value.isSampleData === "boolean") &&
     (value.firstName === undefined || typeof value.firstName === "string") &&
     (value.expectedIncomeSource === undefined || typeof value.expectedIncomeSource === "string") &&
     (value.nextIncomeDate === undefined || isDate(value.nextIncomeDate)) &&

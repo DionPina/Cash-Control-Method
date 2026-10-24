@@ -84,6 +84,9 @@ export function budgetVariances(plan: MonthlyPlan, report: PeriodReport): Budget
 
 export type PlanProgress = {
   totalCash: number;
+  accountProtectedBalance: number;
+  goalReservedBalance: number;
+  protectedCash: number;
   expectedIncomeRemaining: number;
   plannedExpensesRemaining: number;
   uncoveredRequiredPayments: number;
@@ -105,6 +108,7 @@ export function calculatePlanProgress(
   const plan = planOverride ?? planForMonth(data, today.slice(0, 7));
   const periodToDate = generatePeriodReport(data, startOfMonth(today), today);
   const position = currentFinancialPosition(data, today);
+  const protection = calculateProtectedCash(data, today);
   const variances = budgetVariances(plan, periodToDate);
   const plannedExpensesRemaining = variances.reduce(
     (sum, item) => sum + Math.max(0, item.remaining),
@@ -133,11 +137,12 @@ export function calculatePlanProgress(
   const savingsContributed = netSavingsTransfers(data, startOfMonth(today), today);
   const savingsRemaining = Math.max(0, savingsTarget - savingsContributed);
   const availableAfterPlan =
-    position.totalCash + expectedIncomeRemaining - plannedExpensesRemaining -
+    position.totalCash - protection.protectedCash + expectedIncomeRemaining - plannedExpensesRemaining -
     uncoveredRequiredPayments - debtPaymentRemaining - savingsRemaining - plan.safetyBuffer;
 
   return {
     totalCash: position.totalCash,
+    ...protection,
     expectedIncomeRemaining,
     plannedExpensesRemaining,
     uncoveredRequiredPayments,
@@ -155,6 +160,9 @@ export function calculatePlanProgress(
 export type SafeToSpendSnapshot = {
   isCalculated: boolean;
   cashNow: number;
+  accountProtectedBalance: number;
+  goalReservedBalance: number;
+  protectedCash: number;
   horizonDate: string;
   usesNextIncomeDate: boolean;
   upcomingRequiredPayments: number;
@@ -191,6 +199,9 @@ export function calculateSafeToSpend(
   return {
     isCalculated: hasGuardrailInputs(data, plan),
     cashNow: progress.totalCash,
+    accountProtectedBalance: progress.accountProtectedBalance,
+    goalReservedBalance: progress.goalReservedBalance,
+    protectedCash: progress.protectedCash,
     horizonDate,
     usesNextIncomeDate,
     upcomingRequiredPayments,
@@ -198,9 +209,31 @@ export function calculateSafeToSpend(
     pendingCashOutflows,
     savingsRemaining: progress.savingsRemaining,
     safetyBuffer: plan.safetyBuffer,
-    safeToSpend: progress.totalCash - upcomingRequiredPayments - plannedNeedsRemaining - pendingCashOutflows -
+    safeToSpend: progress.totalCash - progress.protectedCash - upcomingRequiredPayments - plannedNeedsRemaining - pendingCashOutflows -
       progress.savingsRemaining - plan.safetyBuffer,
   };
+}
+
+export function calculateProtectedCash(
+  data: AccountingData,
+  today: string,
+): { accountProtectedBalance: number; goalReservedBalance: number; protectedCash: number } {
+  const position = currentFinancialPosition(data, today);
+  const protectedAccountIds = new Set(
+    data.assetAccounts.filter((account) => account.protectFromSpending).map((account) => account.id),
+  );
+  const accountProtectedBalance = position.assetBalances.reduce(
+    (sum, account) => sum + (protectedAccountIds.has(account.id) ? Math.max(0, account.balance) : 0),
+    0,
+  );
+  const goalReservedBalance = (data.goals ?? []).reduce(
+    (sum, goal) => sum + Math.max(0, goal.currentAmount),
+    0,
+  );
+  // Goal reserves often live inside a protected savings account. Taking the
+  // larger reserve protects both intentions without subtracting the same cash twice.
+  const protectedCash = Math.min(position.totalCash, Math.max(accountProtectedBalance, goalReservedBalance));
+  return { accountProtectedBalance, goalReservedBalance, protectedCash };
 }
 
 function supplementalPlannedNeedsDueThrough(

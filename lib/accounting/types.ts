@@ -65,6 +65,7 @@ export type AssetAccount = {
   type: AssetAccountType;
   openingBalance: number;
   openingBalanceDate: string;
+  protectFromSpending?: boolean;
 };
 
 export type LiabilityAccount = {
@@ -177,6 +178,7 @@ export type StudentPriority =
 
 export type StudentProfile = {
   onboardingComplete: boolean;
+  isSampleData?: boolean;
   firstName?: string;
   priorities: StudentPriority[];
   expectedIncomeSource?: string;

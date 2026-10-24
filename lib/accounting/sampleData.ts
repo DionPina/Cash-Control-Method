@@ -13,6 +13,7 @@ export function createSampleData(): AccountingData {
     version: 1,
     profile: {
       onboardingComplete: true,
+      isSampleData: true,
       firstName: "Alex",
       priorities: ["make-money-last", "understand-spending", "build-savings"],
       expectedIncomeSource: "Campus job",
@@ -33,6 +34,7 @@ export function createSampleData(): AccountingData {
         type: "savings",
         openingBalance: 1_200,
         openingBalanceDate: monthStart,
+        protectFromSpending: true,
       },
     ],
     liabilityAccounts: [

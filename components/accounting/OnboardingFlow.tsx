@@ -172,7 +172,7 @@ export default function OnboardingFlow({
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-slate-600">
                 See what comes in, where it goes, and what needs your attention through quick daily check-ins, weekly pacing, and monthly reviews.
               </p>
-              <p className="mt-5 text-sm text-slate-500">Setup takes about five minutes. Your information stays in this browser.</p>
+              <p className="mt-5 text-sm text-slate-500">Setup takes about five minutes. Records stay only in this browser, do not automatically follow you to another device, and may be lost if browser data is cleared. You can export backups after setup.</p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <PrimaryButton type="button" onClick={() => setStep(1)}>Get started</PrimaryButton>
                 <SecondaryButton type="button" onClick={onLoadSample}>Explore with sample data</SecondaryButton>

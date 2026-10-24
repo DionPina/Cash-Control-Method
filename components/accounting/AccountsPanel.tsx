@@ -193,6 +193,7 @@ export default function AccountsPanel({
                     openingBalance={account.openingBalance}
                     openingDate={account.openingBalanceDate}
                     currentBalance={balance}
+                    details={account.protectFromSpending ? "Protected from everyday spending" : undefined}
                     onEdit={() => {
                       setEditingAsset(account);
                       setFormType("asset");
@@ -327,6 +328,7 @@ function AssetAccountForm({ account, transactions, onSave, onCancel }: { account
   const [type, setType] = useState<AssetAccountType>(account?.type ?? "checking");
   const [openingBalance, setOpeningBalance] = useState(account ? String(account.openingBalance) : "");
   const [openingDate, setOpeningDate] = useState(account?.openingBalanceDate ?? todayIso());
+  const [protectFromSpending, setProtectFromSpending] = useState(account?.protectFromSpending ?? false);
   const [errors, setErrors] = useState<string[]>([]);
 
   const submit = () => {
@@ -337,6 +339,7 @@ function AssetAccountForm({ account, transactions, onSave, onCancel }: { account
       type,
       openingBalance: parsedBalance ?? Number.NaN,
       openingBalanceDate: openingDate,
+      protectFromSpending,
     };
     const nextErrors = validateAssetAccount(next, transactions);
     if (nextErrors.length) return setErrors(nextErrors);
@@ -352,6 +355,10 @@ function AssetAccountForm({ account, transactions, onSave, onCancel }: { account
         <Field label="Opening balance"><TextInput inputMode="decimal" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} placeholder="0.00" /></Field>
         <Field label="Opening balance date"><TextInput type="date" value={openingDate} onChange={(event) => setOpeningDate(event.target.value)} /></Field>
       </div>
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+        <input type="checkbox" checked={protectFromSpending} onChange={(event) => setProtectFromSpending(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-700" />
+        <span><span className="block text-sm font-semibold text-[#020b24]">Protect this balance from everyday spending</span><span className="mt-1 block text-xs leading-5 text-slate-600">Cash Control will keep this account in your financial position but remove its current balance from the safe-to-spend guardrail. Goal reserves inside a protected account are not subtracted twice.</span></span>
+      </label>
       <FormErrors errors={errors} />
       <div className="mt-5 flex gap-2"><PrimaryButton type="button" onClick={submit}>Save account</PrimaryButton><SecondaryButton type="button" onClick={onCancel}>Cancel</SecondaryButton></div>
     </SectionCard>

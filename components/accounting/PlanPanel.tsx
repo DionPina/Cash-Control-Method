@@ -87,7 +87,7 @@ export default function PlanPanel({
   const variances = budgetVariances(plan, monthly);
   const progress = calculatePlanProgress(data, today, plan);
   const safe = calculateSafeToSpend(data, today, plan);
-  const totalResources = progress.totalCash + progress.expectedIncomeRemaining;
+  const totalResources = progress.totalCash - progress.protectedCash + progress.expectedIncomeRemaining;
   const remainingUses = progress.plannedExpensesRemaining + progress.uncoveredRequiredPayments +
     progress.debtPaymentRemaining + progress.savingsRemaining + progress.safetyBuffer;
   const unassigned = progress.availableAfterPlan;
@@ -125,7 +125,7 @@ export default function PlanPanel({
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <PlanMetric label="Cash + money expected" value={totalResources} />
+        <PlanMetric label="Unprotected cash + expected" value={totalResources} />
         <PlanMetric label="Expenses still planned" value={progress.plannedExpensesRemaining + progress.uncoveredRequiredPayments} />
         <PlanMetric label="Savings and debt left" value={progress.savingsRemaining + progress.debtPaymentRemaining} />
         <PlanMetric label={unassigned >= 0 ? "Left to plan" : "Plan needs attention"} value={Math.abs(unassigned)} warning={unassigned < 0} />
@@ -141,15 +141,16 @@ export default function PlanPanel({
         <p className="mt-1 text-sm text-slate-300">{safe.isCalculated ? (safe.usesNextIncomeDate ? "This stops before your next expected income arrives." : "No future income date is saved, so this uses the end of the month.") : "Add at least one real planning amount below. Cash available is shown separately until your needs and commitments are established."}</p>
         <p className={`mt-5 text-4xl font-semibold ${safe.isCalculated && safe.safeToSpend < 0 ? "text-amber-300" : "text-white"}`}>{safe.isCalculated ? formatCurrency(safe.safeToSpend) : formatCurrency(safe.cashNow)}</p>
         {!safe.isCalculated && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Cash available</p>}
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <GuardrailItem label="Cash now" value={safe.cashNow} />
+          <GuardrailItem label="Protected / goal reserved" value={safe.protectedCash} subtract />
           <GuardrailItem label="Bills due first" value={safe.upcomingRequiredPayments} subtract />
           <GuardrailItem label="Other planned needs" value={safe.plannedNeedsRemaining} subtract />
           <GuardrailItem label="Pending cash out" value={safe.pendingCashOutflows} subtract />
           <GuardrailItem label="Savings left" value={safe.savingsRemaining} subtract />
           <GuardrailItem label="Cash cushion" value={safe.safetyBuffer} subtract />
         </div>
-        <p className="mt-4 text-xs leading-5 text-slate-300">This estimate can only protect bills and pending activity recorded in Cash Control. Update the next income date and required payments whenever timing changes.</p>
+        <p className="mt-4 text-xs leading-5 text-slate-300">Protected accounts currently hold {formatCurrency(safe.accountProtectedBalance)} and goals reserve {formatCurrency(safe.goalReservedBalance)}. Cash Control uses the larger amount—not both—so a goal held inside protected savings is not subtracted twice. This estimate can only protect information recorded here.</p>
       </SectionCard>
 
       <SectionCard>

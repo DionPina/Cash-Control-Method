@@ -55,6 +55,7 @@ export function buildOnboardingData(values: OnboardingValues, today: string): Ac
     version: 1,
     profile: {
       onboardingComplete: true,
+      isSampleData: false,
       firstName: values.firstName.trim() || undefined,
       priorities: values.priorities,
       expectedIncomeSource: values.incomeSource.trim() || undefined,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAccountingStore } from "@/hooks/useAccountingStore";
 import { createSampleData } from "@/lib/accounting/sampleData";
@@ -24,13 +24,19 @@ const areas: Array<{ id: AppArea; label: string; helper: string }> = [
   { id: "plan", label: "Plan", helper: "What money must cover" },
   { id: "reviews", label: "Review", helper: "Daily, weekly, monthly" },
 ];
+const LAST_BACKUP_KEY = "cash-control-last-backup-at";
 
 export default function CashControlApp() {
   const store = useAccountingStore();
   const [activeArea, setActiveArea] = useState<AppArea>("home");
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLastBackupAt(window.localStorage.getItem(LAST_BACKUP_KEY));
+  }, []);
 
   if (!store.hydrated) {
     return (
@@ -84,7 +90,17 @@ export default function CashControlApp() {
     link.download = `cash-control-backup-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setBackupMessage("Backup exported. Keep the JSON file somewhere you trust.");
+    const exportedAt = new Date().toISOString();
+    window.localStorage.setItem(LAST_BACKUP_KEY, exportedAt);
+    setLastBackupAt(exportedAt);
+    setBackupMessage("Backup exported. Keep the JSON file somewhere you trust; it is the copy you can move to another device.");
+  };
+
+  const startPersonalRecords = () => {
+    if (!window.confirm("Leave sample data and start your own records? The sample will be removed from this browser.")) return;
+    store.clearAllData();
+    setEditingTransaction(null);
+    setActiveArea("home");
   };
 
   const importBackup = async (file?: File) => {
@@ -166,6 +182,18 @@ export default function CashControlApp() {
           </details>
         </div>
 
+        {store.data.profile?.isSampleData && (
+          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="text-sm font-semibold text-violet-950">Sample data — explore freely</p><p className="mt-0.5 text-xs text-violet-800">Nothing here is your personal financial record.</p></div>
+            <SecondaryButton type="button" onClick={startPersonalRecords}>Start my personal records</SecondaryButton>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="font-semibold text-[#020b24]">Saved only in this browser</p><p className="mt-0.5 text-xs leading-5 text-slate-600">Records do not automatically follow you to another device and may be lost if browser data is cleared. {lastBackupAt ? `Last backup exported ${formatBackupTime(lastBackupAt)}.` : "No backup has been exported from this browser yet."}</p></div>
+          <SecondaryButton type="button" className="shrink-0" onClick={exportBackup}>Export backup</SecondaryButton>
+        </div>
+
         {store.storageMessage && (
           <div role="alert" className="mt-4 flex items-start justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p>{store.storageMessage}</p>
@@ -244,4 +272,10 @@ export default function CashControlApp() {
       </div>
     </section>
   );
+}
+
+function formatBackupTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "previously";
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
